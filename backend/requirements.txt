@@ -1,0 +1,3 @@
+# requirements.txt
+boto3>=1.34.0
+deepgram-sdk>=3.0.0
