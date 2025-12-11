@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dental Scribe AI</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div id="app">
+      <div id="login-screen" class="screen">
+        <div class="login-box">
+          <h2>Dental Scribe AI</h2>
+          <div class="input-group">
+            <label>Email</label>
+            <input type="email" id="email" placeholder="name@dentaloffice.com">
+          </div>
+          <div class="input-group">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="••••••••">
+          </div>
+          <button id="login-btn" class="primary-btn">Sign In</button>
+          <p id="login-error" class="error-text"></p>
+        </div>
+      </div>
+
+      <div id="dashboard-screen" class="screen hidden">
+        <nav class="top-nav">
+          <h3>🦷 Scribe AI</h3>
+          <div class="user-info">
+            <span id="user-email">user@test.com</span>
+            <button id="logout-btn" class="text-btn">Logout</button>
+          </div>
+        </nav>
+
+        <div class="content-grid">
+          <div class="panel patient-panel">
+            <div class="panel-header">
+              <h4>Patients</h4>
+              <button id="add-patient-btn" class="icon-btn">+</button>
+            </div>
+            <div class="search-box">
+              <input type="text" id="patient-search" placeholder="Search patients...">
+            </div>
+            <ul id="patient-list">
+              </ul>
+          </div>
+
+          <div class="panel main-panel">
+            <div class="panel-header">
+              <h4 id="current-patient-name">Select a Patient</h4>
+              <span id="recording-status">Ready</span>
+            </div>
+
+            <div class="action-area">
+              <button id="record-btn" class="record-btn">
+                <span class="icon">🎙️</span>
+                <span id="record-text">Start Conversation</span>
+              </button>
+            </div>
+
+            <div class="transcript-area">
+              <label>Live Transcript:</label>
+              <div id="live-transcript" class="scroll-box"></div>
+            </div>
+          </div>
+
+          <div class="panel note-panel">
+            <div class="panel-header">
+              <h4>Visit Summary</h4>
+              <button id="copy-btn" class="secondary-btn">Copy Note</button>
+            </div>
+            <div id="soap-note-display" class="scroll-box note-content">
+              <p class="placeholder-text">Note will appear here after recording...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
