@@ -138,7 +138,7 @@ function login(email, password) {
         }
       });
 
-      showScreen('main-screen');
+      showScreen('dashboard-screen');
       showView('visit');
       loadHistory();
       // checkAdminAccess(); // Disabled until admin routes are fully fixed
