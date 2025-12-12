@@ -4,7 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dental Scribe AI</title>
-    <link rel="stylesheet" href="style.css">
+
+    <link rel="stylesheet" href="/src/style.css">
+
+    <script>
+      if (typeof global === 'undefined') {
+        window.global = window;
+      }
+    </script>
   </head>
   <body>
     <div id="app">
@@ -42,18 +49,26 @@
             <div class="search-box">
               <input type="text" id="patient-search" placeholder="Search patients...">
             </div>
+            <div id="patient-results" class="patient-results-dropdown" style="display:none;"></div>
             <ul id="patient-list">
               </ul>
           </div>
 
           <div class="panel main-panel">
             <div class="panel-header">
-              <h4 id="current-patient-name">Select a Patient</h4>
-              <span id="recording-status">Ready</span>
+              <div id="capture-prompt">
+                <span class="prompt-icon">👤</span>
+                <h3>Select or add a patient to begin</h3>
+                <p>Search by name or create a new patient record.</p>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span id="recording-status"></span>
+                <button id="patient-clear" class="text-btn" style="display:none;">Change Patient</button>
+              </div>
             </div>
 
             <div class="action-area">
-              <button id="record-btn" class="record-btn">
+              <button id="record-btn" class="record-btn" disabled>
                 <span class="icon">🎙️</span>
                 <span id="record-text">Start Conversation</span>
               </button>
@@ -61,7 +76,7 @@
 
             <div class="transcript-area">
               <label>Live Transcript:</label>
-              <div id="live-transcript" class="scroll-box"></div>
+              <textarea id="transcript" class="scroll-box" readonly></textarea>
             </div>
           </div>
 
@@ -70,7 +85,7 @@
               <h4>Visit Summary</h4>
               <button id="copy-btn" class="secondary-btn">Copy Note</button>
             </div>
-            <div id="soap-note-display" class="scroll-box note-content">
+            <div id="soap-note" class="scroll-box note-content">
               <p class="placeholder-text">Note will appear here after recording...</p>
             </div>
           </div>
