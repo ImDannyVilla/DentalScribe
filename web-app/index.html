@@ -12,87 +12,110 @@
     </script>
 
     <link rel="stylesheet" href="/src/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   </head>
   <body>
     <div id="app">
+
       <div id="login-screen" class="screen active">
-        <div class="login-box">
-          <h2>Dental Scribe AI</h2>
-          <div class="input-group">
-            <label>Email</label>
-            <input type="email" id="email" placeholder="name@dentaloffice.com">
+        <div class="login-wrapper">
+          <div class="brand-logo">
+            <i class="fa-solid fa-tooth"></i>
+            <span>Twofold Dental</span>
           </div>
-          <div class="input-group">
-            <label>Password</label>
-            <input type="password" id="password" placeholder="••••••••">
+          <div class="login-card">
+            <h2>Welcome Back</h2>
+            <p class="login-subtext">Sign in to your workspace</p>
+
+            <div class="input-group">
+              <label>Email Address</label>
+              <input type="email" id="email" placeholder="name@dentaloffice.com">
+            </div>
+            <div class="input-group">
+              <label>Password</label>
+              <input type="password" id="password" placeholder="••••••••">
+            </div>
+
+            <button id="login-btn" class="btn-primary-block">Sign In</button>
+            <p id="login-error" class="error-text"></p>
           </div>
-          <button id="login-btn" class="primary-btn">Sign In</button>
-          <p id="login-error" class="error-text"></p>
         </div>
       </div>
 
       <div id="dashboard-screen" class="screen hidden">
-        <nav class="top-nav">
-          <h3>🦷 Scribe AI</h3>
-          <div class="user-info">
-            <span id="user-email">user@test.com</span>
-            <button id="logout-btn" class="text-btn">Logout</button>
+
+        <header class="app-header">
+          <div class="header-left">
+            <i class="fa-solid fa-tooth"></i>
+            <span class="brand-name">Twofold Dental</span>
           </div>
-        </nav>
-
-        <div class="content-grid">
-          <div class="panel patient-panel">
-            <div class="panel-header">
-              <h4>Patients</h4>
-              <button id="add-patient-btn" class="icon-btn">+</button>
-            </div>
-            <div class="search-box">
-              <input type="text" id="patient-search" placeholder="Search patients...">
-            </div>
-            <div id="patient-results" class="patient-results-dropdown" style="display:none;"></div>
-            <ul id="patient-list">
-              </ul>
+          <div class="header-right">
+            <span id="user-email">doctor@example.com</span>
+            <button id="logout-btn" class="btn-text-white">Logout</button>
           </div>
+        </header>
 
-          <div class="panel main-panel">
-            <div class="panel-header">
-              <div id="capture-prompt">
-                <span class="prompt-icon">👤</span>
-                <h3>Select or add a patient to begin</h3>
-                <p>Search by name or create a new patient record.</p>
+        <main class="app-body">
+
+          <div id="setup-panel" class="setup-card">
+
+            <div class="card-row">
+              <input type="text" id="patient-search" class="input-modern" placeholder="Patient Name">
+              <div id="patient-results" class="results-dropdown" style="display:none;"></div>
+            </div>
+
+            <div class="card-row grid-2">
+              <div class="select-wrapper">
+                <label>Template</label>
+                <select id="template-select" class="select-modern">
+                  <option value="soap_general">SOAP (General Dentistry)</option>
+                  <option value="hygiene">Hygiene / Recall</option>
+                  <option value="limited">Limited Exam (Emergency)</option>
+                  <option value="ortho">Orthodontic Adjustment</option>
+                  <option value="perio">Periodontal Maintenance</option>
+                </select>
               </div>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <span id="recording-status"></span>
-                <button id="patient-clear" class="text-btn" style="display:none;">Change Patient</button>
+
+              <div class="select-wrapper">
+                <label>Modality</label>
+                <select id="modality-select" class="select-modern">
+                  <option value="in_person">In Person</option>
+                  <option value="telehealth">Telehealth</option>
+                </select>
               </div>
             </div>
 
-            <div class="action-area">
-              <button id="record-btn" class="record-btn" disabled>
-                <span class="icon">🎙️</span>
-                <span id="record-text">Start Conversation</span>
+            <div class="action-center">
+              <button id="record-btn" class="record-btn-circle">
+                <i class="fa-solid fa-microphone"></i>
               </button>
+              <p id="recording-status">Tap to Capture Conversation</p>
             </div>
+          </div>
 
-            <div class="transcript-area">
-              <label>Live Transcript:</label>
+          <div id="results-panel" class="results-grid hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <h4><i class="fa-regular fa-file-lines"></i> Live Transcript</h4>
+              </div>
               <textarea id="transcript" class="scroll-box" readonly></textarea>
             </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h4><i class="fa-solid fa-wand-magic-sparkles"></i> Generated Note</h4>
+                <button id="copy-btn" class="btn-small">Copy</button>
+              </div>
+              <div id="soap-note" class="scroll-box note-content">
+                <p class="placeholder-text">Note will generate here...</p>
+              </div>
+            </div>
           </div>
 
-          <div class="panel note-panel">
-            <div class="panel-header">
-              <h4>Visit Summary</h4>
-              <button id="copy-btn" class="secondary-btn">Copy Note</button>
-            </div>
-            <div id="soap-note" class="scroll-box note-content">
-              <p class="placeholder-text">Note will appear here after recording...</p>
-            </div>
-          </div>
-        </div>
+        </main>
       </div>
     </div>
 
     <script type="module" src="/src/main.js"></script>
   </body>
-</html>>
+</html>
