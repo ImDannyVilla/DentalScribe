@@ -27,3 +27,8 @@ desktop-app/config.js
 # Blocks any local shell scripts with keys
 deploy.ps1
 deploy.sh
+.env
+
+*.zip
+
+__pycache__/
