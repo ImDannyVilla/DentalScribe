@@ -725,3 +725,4 @@ document.addEventListener('DOMContentLoaded', () => {
   const copyBtn = document.getElementById('copy-btn');
   if(copyBtn) copyBtn.addEventListener('click', copyToClipboard);
 });
+
