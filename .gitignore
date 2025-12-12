@@ -1,0 +1,29 @@
+# --- AWS SAM & CloudFormation ---
+.aws-sam/
+samconfig.toml
+*.yaml.bkp
+*.template
+
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# --- Node.js / Frontend ---
+node_modules/
+dist/
+.DS_Store
+
+# --- JetBrains IDE ---
+.idea/
+
+# --- Sensitive Configs (CRITICAL) ---
+# Blocks config.js in frontend if it has keys
+desktop-app/config.js 
+# Blocks any local shell scripts with keys
+deploy.ps1
+deploy.sh

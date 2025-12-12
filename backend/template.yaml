@@ -1,0 +1,423 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Dental Scribe AI - Serverless Backend (Cognito Decoupled)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - prod
+
+  DeepgramApiKey:
+    Type: String
+    NoEcho: true
+    Description: Deepgram API Key for speech-to-text
+
+  ExistingUserPoolId:
+    Type: String
+    Description: The ID of the existing Cognito User Pool (e.g., us-west-2_xxxxxx)
+
+  ExistingUserPoolClientId:
+    Type: String
+    Description: The ID of the existing Cognito App Client
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 512
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        NOTES_TABLE: !Ref DentalScribeNotesTable
+        USERS_TABLE: !Ref UsersTable
+        PATIENTS_TABLE: !Ref PatientsTable
+        DEEPGRAM_SECRET_ARN: !Ref DeepgramSecret
+        USER_POOL_ID: !Ref ExistingUserPoolId  # UPDATED
+        AWS_REGION: !Ref AWS::Region
+    Tracing: Active
+
+Resources:
+  # ========================================
+  # DYNAMODB - Data Storage
+  # ========================================
+  DentalScribeNotesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub DentalScribeNotes-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+        - AttributeName: patient_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: patient-index
+          KeySchema:
+            - AttributeName: patient_id
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        Enabled: true
+        AttributeName: ttl
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Tags:
+        - Key: HIPAA
+          Value: "true"
+        - Key: Environment
+          Value: !Ref Environment
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub DentalScribeUsers-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: email-index
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  PatientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub DentalScribePatients-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: practice_id
+          AttributeType: S
+        - AttributeName: patient_id
+          AttributeType: S
+        - AttributeName: name_lowercase
+          AttributeType: S
+      KeySchema:
+        - AttributeName: practice_id
+          KeyType: HASH
+        - AttributeName: patient_id
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: name-search-index
+          KeySchema:
+            - AttributeName: practice_id
+              KeyType: HASH
+            - AttributeName: name_lowercase
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # ========================================
+  # SECRETS MANAGER
+  # ========================================
+  DeepgramSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub dental-scribe-deepgram-${Environment}
+      Description: Deepgram API Key for speech-to-text
+      SecretString: !Sub '{"api_key":"${DeepgramApiKey}"}'
+
+  # ========================================
+  # API GATEWAY
+  # ========================================
+  DentalScribeApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub dental-scribe-api-${Environment}
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            # Construct ARN manually: arn:aws:cognito-idp:REGION:ACCOUNT:userpool/POOL_ID
+            UserPoolArn: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/dental-scribe-${Environment}
+      RetentionInDays: 90
+
+  # ========================================
+  # LAMBDA FUNCTIONS
+  # ========================================
+
+  # Transcribe Audio Function
+  TranscribeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-transcribe-${Environment}
+      CodeUri: functions/transcribe/
+      Handler: handler.lambda_handler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref DeepgramSecret
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /transcribe
+            Method: POST
+
+    # Generate SOAP Note Function
+    GenerateNoteFunction:
+      Type: AWS::Serverless::Function
+      Properties:
+        FunctionName: !Sub dental-scribe-generate-${Environment}
+        CodeUri: functions/generate/
+        Handler: handler.lambda_handler
+        Timeout: 60
+        # --- NEW: Add the Model ID so SAM knows about it ---
+        Environment:
+          Variables:
+            MODEL_ID: "anthropic.claude-haiku-4-5-20251001-v1:0"
+        # ---------------------------------------------------
+        Policies:
+          - Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-*
+                  - !Sub arn:aws:bedrock:*::foundation-model/anthropic.claude-*
+                  - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource: !GetAtt DentalScribeNotesTable.Arn
+        Events:
+          ApiEvent:
+            Type: Api
+            Properties:
+              RestApiId: !Ref DentalScribeApi
+              Path: /generate-note
+              Method: POST
+
+  # Save Note Function
+  SaveNoteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-save-${Environment}
+      CodeUri: functions/notes/
+      Handler: save.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DentalScribeNotesTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /notes
+            Method: POST
+
+  # Get Note History Function
+  GetNotesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-history-${Environment}
+      CodeUri: functions/notes/
+      Handler: history.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DentalScribeNotesTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /notes
+            Method: GET
+
+  # Invite User Function
+  InviteUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-invite-${Environment}
+      CodeUri: functions/admin/
+      Handler: invite.lambda_handler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminGetUser
+              # Construct ARN for policy
+              Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: '*'
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /admin/invite
+            Method: POST
+
+  # List Users Function
+  ListUsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-list-users-${Environment}
+      CodeUri: functions/admin/
+      Handler: list_users.lambda_handler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+                - cognito-idp:AdminGetUser
+              Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /admin/users
+            Method: GET
+
+  # ========================================
+  # PATIENT MANAGEMENT FUNCTIONS
+  # ========================================
+
+  # Search Patients Function
+  SearchPatientsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-search-patients-${Environment}
+      CodeUri: functions/patients/
+      Handler: search.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /patients/search
+            Method: GET
+
+  # Create Patient Function
+  CreatePatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-create-patient-${Environment}
+      CodeUri: functions/patients/
+      Handler: create.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /patients
+            Method: POST
+
+  # Get Patient Function
+  GetPatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-get-patient-${Environment}
+      CodeUri: functions/patients/
+      Handler: get.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /patients/{patient_id}
+            Method: GET
+
+  # ========================================
+  # CLOUDWATCH
+  # ========================================
+  ErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub dental-scribe-errors-${Environment}
+      AlarmDescription: Alert on Lambda errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${DentalScribeApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiEndpoint
+
+  UserPoolId:
+    Description: Cognito User Pool ID (Existing)
+    Value: !Ref ExistingUserPoolId
+    Export:
+      Name: !Sub ${AWS::StackName}-UserPoolId
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID (Existing)
+    Value: !Ref ExistingUserPoolClientId
+    Export:
+      Name: !Sub ${AWS::StackName}-UserPoolClientId
+
+  NotesTableName:
+    Description: DynamoDB Notes Table Name
+    Value: !Ref DentalScribeNotesTable
+    Export:
+      Name: !Sub ${AWS::StackName}-NotesTable

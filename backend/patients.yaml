@@ -1,0 +1,131 @@
+# patients.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Dental Scribe AI - Patient Management (Sidecar Stack)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+
+  ExistingUserPoolArn:
+    Type: String
+    Description: ARN of the existing main User Pool
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        PATIENTS_TABLE: !Ref PatientsTable
+        # AWS_REGION is removed because it is reserved/automatic
+
+Resources:
+  # ========================================
+  # NEW API GATEWAY (For Patient Routes)
+  # ========================================
+  PatientsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub dental-scribe-patients-api-${Environment}
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref ExistingUserPoolArn
+
+  # ========================================
+  # DYNAMODB - Patients Table
+  # ========================================
+  PatientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub DentalScribePatients-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: practice_id
+          AttributeType: S
+        - AttributeName: patient_id
+          AttributeType: S
+        - AttributeName: name_lowercase
+          AttributeType: S
+      KeySchema:
+        - AttributeName: practice_id
+          KeyType: HASH
+        - AttributeName: patient_id
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: name-search-index
+          KeySchema:
+            - AttributeName: practice_id
+              KeyType: HASH
+            - AttributeName: name_lowercase
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # ========================================
+  # LAMBDA FUNCTIONS
+  # ========================================
+  SearchPatientsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-search-patients-${Environment}
+      CodeUri: functions/patients/
+      Handler: search.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PatientsApi
+            Path: /patients/search
+            Method: GET
+
+  CreatePatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-create-patient-${Environment}
+      CodeUri: functions/patients/
+      Handler: create.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PatientsApi
+            Path: /patients
+            Method: POST
+
+  GetPatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub dental-scribe-get-patient-${Environment}
+      CodeUri: functions/patients/
+      Handler: get.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PatientsApi
+            Path: /patients/{patient_id}
+            Method: GET
+
+Outputs:
+  PatientsApiEndpoint:
+    Description: Base URL for Patient API
+    Value: !Sub https://${PatientsApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
