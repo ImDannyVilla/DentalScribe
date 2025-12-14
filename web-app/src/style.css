@@ -35,12 +35,19 @@ body {
 .hidden { display: none !important; }
 
 /* =========================================
-   3. LOGIN SCREEN (Cleaned Up)
+   3. LOGIN SCREEN (Centered Fix)
    ========================================= */
 #login-screen {
+  /* Force full screen height */
+  height: 100vh;
+  width: 100vw;
   background-color: var(--bg-page);
-  justify-content: center;
-  align-items: center;
+
+  /* Flexbox Centering Magic */
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center; /* Vertical Center */
+  align-items: center;     /* Horizontal Center */
 }
 
 .login-wrapper {
@@ -49,13 +56,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  /* Ensure no margins push it off-center */
+  margin: 0;
+  padding: 1rem; /* Prevent touching edges on mobile */
 }
 
 .brand-logo {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
   color: var(--primary-blue);
   justify-content: center;
@@ -64,15 +74,17 @@ body {
 .login-card {
   background: white;
   padding: 2.5rem;
-  border-radius: 12px;
+  border-radius: 16px;
   box-shadow: var(--shadow-card);
   border: 1px solid var(--border-light);
+  width: 100%;
 }
 
 .login-card h2 {
   text-align: center;
   margin-bottom: 0.5rem;
   font-size: 1.5rem;
+  color: var(--text-main);
 }
 
 .login-subtext {
@@ -81,33 +93,6 @@ body {
   margin-bottom: 2rem;
   font-size: 0.95rem;
 }
-
-.input-group { margin-bottom: 1.25rem; }
-.input-group label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; color: var(--text-main); }
-.input-group input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
-}
-.input-group input:focus { outline: none; border-color: var(--primary-blue); }
-
-.btn-primary-block {
-  width: 100%;
-  padding: 0.875rem;
-  background-color: var(--primary-blue);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.btn-primary-block:hover { background-color: var(--primary-dark); }
-.error-text { color: var(--danger); text-align: center; margin-top: 1rem; font-size: 0.875rem; min-height: 1.25rem; }
 
 /* =========================================
    4. DASHBOARD HEADER (Twofold Style)
