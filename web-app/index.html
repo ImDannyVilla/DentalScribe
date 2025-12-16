@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dental Scribe AI</title>
+    <title>Scribe32 - AI Medical Scribe</title>
 
     <script>
       if (typeof global === 'undefined') {
@@ -23,8 +23,8 @@
       <div id="login-screen" class="screen active">
         <div class="login-wrapper">
           <div class="brand-logo">
-            <i class="fa-solid fa-tooth"></i>
-            <span>Twofold Dental</span>
+            <i class="fa-solid fa-notes-medical"></i>
+            <span>Scribe32</span>
           </div>
           <div class="login-card">
             <h2>Welcome Back</h2>
@@ -32,7 +32,7 @@
 
             <div class="input-group">
               <label>Email Address</label>
-              <input type="email" id="email" placeholder="name@dentaloffice.com">
+              <input type="email" id="email" placeholder="name@clinic.com">
             </div>
             <div class="input-group">
               <label>Password</label>
@@ -55,8 +55,8 @@
       <div id="forgot-password-screen" class="screen hidden">
         <div class="login-wrapper">
           <div class="brand-logo">
-            <i class="fa-solid fa-tooth"></i>
-            <span>Twofold Dental</span>
+            <i class="fa-solid fa-notes-medical"></i>
+            <span>Scribe32</span>
           </div>
           <div class="login-card">
             <h2>Reset Password</h2>
@@ -64,7 +64,7 @@
 
             <div class="input-group">
               <label>Email Address</label>
-              <input type="email" id="forgot-email" placeholder="name@dentaloffice.com">
+              <input type="email" id="forgot-email" placeholder="name@clinic.com">
             </div>
 
             <button id="send-code-btn" class="btn-primary-block">Send Verification Code</button>
@@ -83,8 +83,8 @@
       <div id="reset-password-screen" class="screen hidden">
         <div class="login-wrapper">
           <div class="brand-logo">
-            <i class="fa-solid fa-tooth"></i>
-            <span>Twofold Dental</span>
+            <i class="fa-solid fa-notes-medical"></i>
+            <span>Scribe32</span>
           </div>
           <div class="login-card">
             <h2>Enter New Password</h2>
@@ -119,75 +119,379 @@
       <!-- ============================================ -->
       <div id="dashboard-screen" class="screen hidden">
 
-        <header class="app-header">
-          <div class="header-left">
-            <i class="fa-solid fa-tooth"></i>
-            <span class="brand-name">Twofold Dental</span>
-          </div>
-          <div class="header-right">
-            <span id="user-email">doctor@example.com</span>
-            <button id="logout-btn" class="btn-text-white">Logout</button>
-          </div>
-        </header>
-
-        <main class="app-body">
-
-          <div id="setup-panel" class="setup-card">
-
-            <div class="card-row">
-              <input type="text" id="patient-search" class="input-modern" placeholder="Patient Name">
-              <div id="patient-results" class="results-dropdown" style="display:none;"></div>
+        <!-- SIDEBAR -->
+        <aside id="sidebar" class="sidebar">
+          <div class="sidebar-header">
+            <div class="sidebar-brand">
+              <i class="fa-solid fa-notes-medical"></i>
+              <span>Scribe32</span>
             </div>
+            <button id="sidebar-toggle" class="sidebar-toggle">
+              <i class="fa-solid fa-bars"></i>
+            </button>
+          </div>
 
-            <div class="card-row grid-2">
-              <div class="select-wrapper">
-                <label>Template</label>
-                <select id="template-select" class="select-modern">
-                  <option value="soap_general">SOAP (General Dentistry)</option>
-                  <option value="hygiene">Hygiene / Recall</option>
-                  <option value="limited">Limited Exam (Emergency)</option>
-                  <option value="ortho">Orthodontic Adjustment</option>
-                  <option value="perio">Periodontal Maintenance</option>
-                </select>
-              </div>
-
-              <div class="select-wrapper">
-                <label>Modality</label>
-                <select id="modality-select" class="select-modern">
-                  <option value="in_person">In Person</option>
-                  <option value="telehealth">Telehealth</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="action-center">
-              <button id="record-btn" class="record-btn-circle">
+          <nav class="sidebar-nav">
+            <div class="nav-section">
+              <a href="#" class="nav-item active" data-view="scribe">
                 <i class="fa-solid fa-microphone"></i>
+                <span>New Visit</span>
+              </a>
+              <a href="#" class="nav-item" data-view="visits">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <span>Visits</span>
+              </a>
+              <a href="#" class="nav-item admin-only" data-view="templates" style="display:none;">
+                <i class="fa-solid fa-file-lines"></i>
+                <span>Templates</span>
+              </a>
+            </div>
+          </nav>
+
+          <div class="sidebar-footer">
+            <a href="#" class="nav-item admin-only" data-view="invite" style="display:none;">
+              <i class="fa-solid fa-user-plus"></i>
+              <span>Invite Team</span>
+            </a>
+            <a href="#" class="nav-item" data-view="settings">
+              <i class="fa-solid fa-gear"></i>
+              <span>Settings</span>
+            </a>
+            <div class="user-info">
+              <div class="user-avatar">
+                <i class="fa-solid fa-user"></i>
+              </div>
+              <div class="user-details">
+                <span id="sidebar-user-email" class="user-email-text">user@example.com</span>
+                <span id="sidebar-user-role" class="user-role-text">User</span>
+              </div>
+            </div>
+            <button id="logout-btn" class="btn-logout">
+              <i class="fa-solid fa-right-from-bracket"></i>
+              <span>Logout</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <div class="main-content">
+
+          <!-- VIEW: SCRIBE (Default) -->
+          <div id="view-scribe" class="view active">
+            <div class="view-header">
+              <h1>New Visit</h1>
+              <p>Record a patient conversation to generate clinical notes</p>
+            </div>
+
+            <div id="setup-panel" class="setup-card">
+              <div class="card-row">
+                <label class="input-label">Patient</label>
+                <input type="text" id="patient-search" class="input-modern" placeholder="Search or create patient...">
+                <div id="patient-results" class="results-dropdown" style="display:none;"></div>
+              </div>
+
+              <div class="card-row grid-2">
+                <div class="select-wrapper">
+                  <label>Template</label>
+                  <select id="template-select" class="select-modern">
+                    <option value="default">Loading templates...</option>
+                  </select>
+                </div>
+
+                <div class="select-wrapper">
+                  <label>Modality</label>
+                  <select id="modality-select" class="select-modern">
+                    <option value="in_person">In Person</option>
+                    <option value="telehealth">Telehealth</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="action-center">
+                <button id="test-mic-btn" class="btn-secondary btn-mic-test">
+                  <i class="fa-solid fa-sliders"></i> Test Microphone
+                </button>
+                <button id="record-btn" class="record-btn-circle">
+                  <i class="fa-solid fa-microphone"></i>
+                </button>
+                <p id="recording-status">Tap to Capture Conversation</p>
+              </div>
+            </div>
+
+            <div id="results-panel" class="results-grid hidden">
+              <div class="panel">
+                <div class="panel-header">
+                  <h4><i class="fa-regular fa-file-lines"></i> Live Transcript</h4>
+                </div>
+                <textarea id="transcript" class="scroll-box" readonly></textarea>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <h4><i class="fa-solid fa-wand-magic-sparkles"></i> Generated Note</h4>
+                  <button id="copy-btn" class="btn-small">Copy</button>
+                </div>
+                <div id="soap-note" class="scroll-box note-content">
+                  <p class="placeholder-text">Note will generate here...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VIEW: VISITS HISTORY -->
+          <div id="view-visits" class="view hidden">
+            <div class="view-header">
+              <h1>Visit History</h1>
+              <p>Review past patient visits and notes</p>
+            </div>
+
+            <div class="visits-filters">
+              <input type="text" id="visits-search" class="input-modern" placeholder="Search by patient name...">
+              <select id="visits-filter" class="select-modern">
+                <option value="all">All Visits</option>
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+              </select>
+            </div>
+
+            <div id="visits-list" class="visits-list">
+              <div class="loading-spinner">
+                <i class="fa-solid fa-spinner fa-spin"></i>
+                <span>Loading visits...</span>
+              </div>
+            </div>
+
+            <!-- Visit Detail Modal -->
+            <div id="visit-modal" class="modal hidden">
+              <div class="modal-content modal-large">
+                <div class="modal-header">
+                  <h2 id="visit-modal-title">Visit Details</h2>
+                  <button class="modal-close" id="close-visit-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                  <div class="visit-detail-grid">
+                    <div class="detail-section">
+                      <h3>Transcript</h3>
+                      <div id="visit-transcript" class="detail-content"></div>
+                    </div>
+                    <div class="detail-section">
+                      <h3>Clinical Note</h3>
+                      <div id="visit-note" class="detail-content"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Mic Test Modal -->
+            <div id="mic-test-modal" class="modal hidden">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h2>Microphone Settings</h2>
+                  <button class="modal-close" id="close-mic-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                  <div class="input-group">
+                    <label>Select Microphone</label>
+                    <select id="mic-select" class="select-modern">
+                      <option value="">Loading microphones...</option>
+                    </select>
+                  </div>
+
+                  <div class="mic-test-section">
+                    <label>Microphone Level</label>
+                    <div class="mic-level-container">
+                      <div class="mic-level-bar">
+                        <div id="mic-level-fill" class="mic-level-fill"></div>
+                      </div>
+                      <span id="mic-level-value" class="mic-level-value">0%</span>
+                    </div>
+                    <p class="mic-test-hint">Speak to test your microphone</p>
+                  </div>
+
+                  <div class="mic-status" id="mic-status">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Microphone ready</span>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button id="mic-test-done-btn" class="btn-primary">Done</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VIEW: TEMPLATES (Admin Only) -->
+          <div id="view-templates" class="view hidden">
+            <div class="view-header">
+              <h1>Templates</h1>
+              <p>Manage note templates with example outputs</p>
+              <button id="add-template-btn" class="btn-primary">
+                <i class="fa-solid fa-plus"></i> New Template
               </button>
-              <p id="recording-status">Tap to Capture Conversation</p>
+            </div>
+
+            <div id="templates-list" class="templates-grid">
+              <div class="loading-spinner">
+                <i class="fa-solid fa-spinner fa-spin"></i>
+                <span>Loading templates...</span>
+              </div>
+            </div>
+
+            <!-- Template Modal -->
+            <div id="template-modal" class="modal hidden">
+              <div class="modal-content modal-large">
+                <div class="modal-header">
+                  <h2 id="template-modal-title">New Template</h2>
+                  <button class="modal-close" id="close-template-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                  <div class="input-group">
+                    <label>Template Name</label>
+                    <input type="text" id="template-name" class="input-modern" placeholder="e.g., SOAP General, Hygiene Recall">
+                  </div>
+                  <div class="input-group">
+                    <label>Description</label>
+                    <input type="text" id="template-description" class="input-modern" placeholder="Brief description of when to use this template">
+                  </div>
+                  <div class="input-group">
+                    <label>Example Note</label>
+                    <p class="input-hint">Paste an example of how you want notes to look. The AI will learn from this format.</p>
+                    <textarea id="template-example" class="textarea-large" placeholder="SUBJECTIVE:
+Patient presents for routine cleaning. Reports no pain or sensitivity...
+
+OBJECTIVE:
+Exam findings: All teeth present, no visible caries...
+
+ASSESSMENT:
+Healthy dentition with mild gingivitis...
+
+PLAN:
+1. Prophylaxis completed
+2. Fluoride treatment applied
+3. Return in 6 months..."></textarea>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button id="cancel-template-btn" class="btn-secondary">Cancel</button>
+                  <button id="save-template-btn" class="btn-primary">Save Template</button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div id="results-panel" class="results-grid hidden">
-            <div class="panel">
-              <div class="panel-header">
-                <h4><i class="fa-regular fa-file-lines"></i> Live Transcript</h4>
-              </div>
-              <textarea id="transcript" class="scroll-box" readonly></textarea>
+          <!-- VIEW: INVITE TEAM (Admin Only) -->
+          <div id="view-invite" class="view hidden">
+            <div class="view-header">
+              <h1>Invite Team Members</h1>
+              <p>Send email invitations to add new users to your practice</p>
             </div>
 
-            <div class="panel">
-              <div class="panel-header">
-                <h4><i class="fa-solid fa-wand-magic-sparkles"></i> Generated Note</h4>
-                <button id="copy-btn" class="btn-small">Copy</button>
+            <div class="invite-section">
+              <div class="invite-card">
+                <h3><i class="fa-solid fa-envelope"></i> Send Invitation</h3>
+                <div class="invite-form">
+                  <div class="input-group">
+                    <label>Email Address</label>
+                    <input type="email" id="invite-email" class="input-modern" placeholder="colleague@clinic.com">
+                  </div>
+                  <div class="input-group">
+                    <label>Name</label>
+                    <input type="text" id="invite-name" class="input-modern" placeholder="Dr. Jane Smith">
+                  </div>
+                  <div class="input-group">
+                    <label>Role</label>
+                    <select id="invite-role" class="select-modern">
+                      <option value="user">User (Standard)</option>
+                      <option value="admin">Admin (Full Access)</option>
+                    </select>
+                  </div>
+                  <button id="send-invite-btn" class="btn-primary">
+                    <i class="fa-solid fa-paper-plane"></i> Send Invitation
+                  </button>
+                  <p id="invite-error" class="error-text"></p>
+                  <p id="invite-success" class="success-text"></p>
+                </div>
               </div>
-              <div id="soap-note" class="scroll-box note-content">
-                <p class="placeholder-text">Note will generate here...</p>
+
+              <!-- Pending Invites -->
+              <div class="invite-card">
+                <h3><i class="fa-solid fa-clock"></i> Team Members</h3>
+                <div id="team-members-list" class="team-list">
+                  <div class="loading-spinner">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                    <span>Loading team...</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-        </main>
+          <!-- VIEW: SETTINGS -->
+          <div id="view-settings" class="view hidden">
+            <div class="view-header">
+              <h1>Account Settings</h1>
+              <p>Manage your account preferences</p>
+            </div>
+
+            <div class="settings-sections">
+              <!-- Profile Section -->
+              <div class="settings-card">
+                <h3><i class="fa-solid fa-user"></i> Profile</h3>
+                <div class="settings-form">
+                  <div class="input-group">
+                    <label>Email</label>
+                    <input type="email" id="settings-email" class="input-modern" disabled>
+                  </div>
+                  <div class="input-group">
+                    <label>Role</label>
+                    <input type="text" id="settings-role" class="input-modern" disabled>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Password Section -->
+              <div class="settings-card">
+                <h3><i class="fa-solid fa-lock"></i> Change Password</h3>
+                <div class="settings-form">
+                  <div class="input-group">
+                    <label>Current Password</label>
+                    <input type="password" id="current-password" class="input-modern" placeholder="••••••••">
+                  </div>
+                  <div class="input-group">
+                    <label>New Password</label>
+                    <input type="password" id="settings-new-password" class="input-modern" placeholder="••••••••">
+                  </div>
+                  <div class="input-group">
+                    <label>Confirm New Password</label>
+                    <input type="password" id="settings-confirm-password" class="input-modern" placeholder="••••••••">
+                  </div>
+                  <button id="change-password-btn" class="btn-primary">Update Password</button>
+                  <p id="password-change-error" class="error-text"></p>
+                  <p id="password-change-success" class="success-text"></p>
+                </div>
+              </div>
+
+              <!-- Two-Factor Auth (Future) -->
+              <div class="settings-card">
+                <h3><i class="fa-solid fa-shield-halved"></i> Security</h3>
+                <div class="settings-row">
+                  <div class="settings-row-info">
+                    <span class="settings-label">Two-Factor Authentication</span>
+                    <span class="settings-sublabel">Add an extra layer of security</span>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="two-factor-toggle" disabled>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <p class="coming-soon-text">Coming Soon</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
 

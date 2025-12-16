@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Dental Scribe AI - Serverless Backend (Cognito Decoupled)
+Description: Scribe32 - AI Medical Scribe Backend
 
 Parameters:
   Environment:
@@ -34,9 +34,9 @@ Globals:
         NOTES_TABLE: !Ref DentalScribeNotesTable
         USERS_TABLE: !Ref UsersTable
         PATIENTS_TABLE: !Ref PatientsTable
+        TEMPLATES_TABLE: !Ref TemplatesTable
         DEEPGRAM_SECRET_ARN: !Ref DeepgramSecret
-        USER_POOL_ID: !Ref ExistingUserPoolId  # UPDATED
-        AWS_REGION: !Ref AWS::Region
+        USER_POOL_ID: !Ref ExistingUserPoolId
     Tracing: Active
 
 Resources:
@@ -139,6 +139,25 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  # NEW: Templates Table
+  TemplatesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub DentalScribeTemplates-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      AttributeDefinitions:
+        - AttributeName: template_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: template_id
+          KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
   # ========================================
   # SECRETS MANAGER
   # ========================================
@@ -155,7 +174,7 @@ Resources:
   DentalScribeApi:
     Type: AWS::Serverless::Api
     Properties:
-      Name: !Sub dental-scribe-api-${Environment}
+      Name: !Sub scribe32-api-${Environment}
       StageName: !Ref Environment
       Cors:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -165,13 +184,12 @@ Resources:
         DefaultAuthorizer: CognitoAuthorizer
         Authorizers:
           CognitoAuthorizer:
-            # Construct ARN manually: arn:aws:cognito-idp:REGION:ACCOUNT:userpool/POOL_ID
             UserPoolArn: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
 
   ApiLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/apigateway/dental-scribe-${Environment}
+      LogGroupName: !Sub /aws/apigateway/scribe32-${Environment}
       RetentionInDays: 90
 
   # ========================================
@@ -182,7 +200,7 @@ Resources:
   TranscribeFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub dental-scribe-transcribe-${Environment}
+      FunctionName: !Sub scribe32-transcribe-${Environment}
       CodeUri: functions/transcribe/
       Handler: handler.lambda_handler
       Policies:
@@ -199,63 +217,47 @@ Resources:
             Path: /transcribe
             Method: POST
 
-    # Generate SOAP Note Function
-    GenerateNoteFunction:
-      Type: AWS::Serverless::Function
-      Properties:
-        FunctionName: !Sub dental-scribe-generate-${Environment}
-        CodeUri: functions/generate/
-        Handler: handler.lambda_handler
-        Timeout: 60
-        # --- NEW: Add the Model ID so SAM knows about it ---
-        Environment:
-          Variables:
-            MODEL_ID: "anthropic.claude-haiku-4-5-20251001-v1:0"
-        # ---------------------------------------------------
-        Policies:
-          - Statement:
-              - Effect: Allow
-                Action:
-                  - bedrock:InvokeModel
-                Resource:
-                  - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-*
-                  - !Sub arn:aws:bedrock:*::foundation-model/anthropic.claude-*
-                  - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*
-              - Effect: Allow
-                Action:
-                  - dynamodb:PutItem
-                Resource: !GetAtt DentalScribeNotesTable.Arn
-        Events:
-          ApiEvent:
-            Type: Api
-            Properties:
-              RestApiId: !Ref DentalScribeApi
-              Path: /generate-note
-              Method: POST
-
-  # Save Note Function
-  SaveNoteFunction:
+  # Generate SOAP Note Function
+  GenerateNoteFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub dental-scribe-save-${Environment}
-      CodeUri: functions/notes/
-      Handler: save.lambda_handler
+      FunctionName: !Sub scribe32-generate-${Environment}
+      CodeUri: functions/generate/
+      Handler: handler.lambda_handler
+      Timeout: 60
+      Environment:
+        Variables:
+          MODEL_ID: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref DentalScribeNotesTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-*
+                - !Sub arn:aws:bedrock:*::foundation-model/anthropic.claude-*
+                - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt DentalScribeNotesTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !GetAtt TemplatesTable.Arn
       Events:
         ApiEvent:
           Type: Api
           Properties:
             RestApiId: !Ref DentalScribeApi
-            Path: /notes
+            Path: /generate-note
             Method: POST
 
   # Get Note History Function
   GetNotesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub dental-scribe-history-${Environment}
+      FunctionName: !Sub scribe32-history-${Environment}
       CodeUri: functions/notes/
       Handler: history.lambda_handler
       Policies:
@@ -269,11 +271,131 @@ Resources:
             Path: /notes
             Method: GET
 
+  # ========================================
+  # TEMPLATES FUNCTIONS
+  # ========================================
+  
+  # List & Create Templates
+  TemplatesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub scribe32-templates-${Environment}
+      CodeUri: functions/templates/
+      Handler: handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TemplatesTable
+      Events:
+        ListTemplates:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /templates
+            Method: GET
+        CreateTemplate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /templates
+            Method: POST
+
+  # Get, Update, Delete Single Template
+  TemplateByIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub scribe32-template-by-id-${Environment}
+      CodeUri: functions/templates/
+      Handler: handler.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TemplatesTable
+      Events:
+        GetTemplate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /templates/{template_id}
+            Method: GET
+        UpdateTemplate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /templates/{template_id}
+            Method: PUT
+        DeleteTemplate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /templates/{template_id}
+            Method: DELETE
+
+  # ========================================
+  # PATIENT MANAGEMENT FUNCTIONS
+  # ========================================
+
+  # Search Patients Function
+  SearchPatientsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub scribe32-search-patients-${Environment}
+      CodeUri: functions/patients/
+      Handler: search.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /patients/search
+            Method: GET
+
+  # Create Patient Function
+  CreatePatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub scribe32-create-patient-${Environment}
+      CodeUri: functions/patients/
+      Handler: create.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /patients
+            Method: POST
+
+  # Get Patient Function
+  GetPatientFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub scribe32-get-patient-${Environment}
+      CodeUri: functions/patients/
+      Handler: get.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PatientsTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DentalScribeApi
+            Path: /patients/{patient_id}
+            Method: GET
+
+  # ========================================
+  # ADMIN FUNCTIONS
+  # ========================================
+  
   # Invite User Function
   InviteUserFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub dental-scribe-invite-${Environment}
+      FunctionName: !Sub scribe32-invite-${Environment}
       CodeUri: functions/admin/
       Handler: invite.lambda_handler
       Policies:
@@ -282,7 +404,6 @@ Resources:
               Action:
                 - cognito-idp:AdminCreateUser
                 - cognito-idp:AdminGetUser
-              # Construct ARN for policy
               Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
             - Effect: Allow
               Action:
@@ -302,7 +423,7 @@ Resources:
   ListUsersFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub dental-scribe-list-users-${Environment}
+      FunctionName: !Sub scribe32-list-users-${Environment}
       CodeUri: functions/admin/
       Handler: list_users.lambda_handler
       Policies:
@@ -323,70 +444,12 @@ Resources:
             Method: GET
 
   # ========================================
-  # PATIENT MANAGEMENT FUNCTIONS
-  # ========================================
-
-  # Search Patients Function
-  SearchPatientsFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub dental-scribe-search-patients-${Environment}
-      CodeUri: functions/patients/
-      Handler: search.lambda_handler
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PatientsTable
-      Events:
-        ApiEvent:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DentalScribeApi
-            Path: /patients/search
-            Method: GET
-
-  # Create Patient Function
-  CreatePatientFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub dental-scribe-create-patient-${Environment}
-      CodeUri: functions/patients/
-      Handler: create.lambda_handler
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PatientsTable
-      Events:
-        ApiEvent:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DentalScribeApi
-            Path: /patients
-            Method: POST
-
-  # Get Patient Function
-  GetPatientFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub dental-scribe-get-patient-${Environment}
-      CodeUri: functions/patients/
-      Handler: get.lambda_handler
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref PatientsTable
-      Events:
-        ApiEvent:
-          Type: Api
-          Properties:
-            RestApiId: !Ref DentalScribeApi
-            Path: /patients/{patient_id}
-            Method: GET
-
-  # ========================================
   # CLOUDWATCH
   # ========================================
   ErrorAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub dental-scribe-errors-${Environment}
+      AlarmName: !Sub scribe32-errors-${Environment}
       AlarmDescription: Alert on Lambda errors
       MetricName: Errors
       Namespace: AWS/Lambda
@@ -421,3 +484,9 @@ Outputs:
     Value: !Ref DentalScribeNotesTable
     Export:
       Name: !Sub ${AWS::StackName}-NotesTable
+
+  TemplatesTableName:
+    Description: DynamoDB Templates Table Name
+    Value: !Ref TemplatesTable
+    Export:
+      Name: !Sub ${AWS::StackName}-TemplatesTable

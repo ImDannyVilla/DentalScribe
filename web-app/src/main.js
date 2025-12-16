@@ -23,10 +23,19 @@ const userPool = new CognitoUserPool(poolData);
 // --- GLOBAL VARIABLES ---
 let currentUser = null;
 let idToken = null;
+let userRole = 'user';
+let userEmail = '';
 let mediaRecorder = null;
 let audioChunks = [];
 let selectedPatient = null;
-let resetEmail = null; // Store email for password reset flow
+let resetEmail = null;
+let templatesCache = [];
+let visitsCache = [];
+let editingTemplateId = null;
+let selectedMicId = null;
+let micTestStream = null;
+let micAnalyser = null;
+let micAnimationFrame = null;
 
 // ============================================
 // UI Management
@@ -38,31 +47,54 @@ function showScreen(screenId) {
   document.querySelectorAll('.screen').forEach(screen => {
     screen.classList.remove('active');
     screen.classList.add('hidden');
-    screen.style.display = 'none';
   });
 
   // Show the requested screen
   const screen = document.getElementById(screenId);
-  console.log("🔍 Found screen element:", screen);
-
   if(screen) {
     screen.classList.remove('hidden');
     screen.classList.add('active');
-
-    // Explicitly set display based on screen type
-    if (screenId === 'login-screen' || screenId === 'forgot-password-screen' || screenId === 'reset-password-screen') {
-        screen.style.display = 'flex';
-    } else {
-        screen.style.display = 'block'; // Dashboard uses block/flex internal
-    }
   } else {
     console.error("❌ Screen not found:", screenId);
   }
 }
 
-function showLoading(show = true) {
-  const status = document.getElementById('recording-status');
-  if(status && show) status.textContent = 'Processing...';
+function showView(viewId) {
+  console.log("🔄 showView called with:", viewId);
+
+  // Update nav items
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.classList.remove('active');
+    if(item.dataset.view === viewId) {
+      item.classList.add('active');
+    }
+  });
+
+  // Hide all views
+  document.querySelectorAll('.view').forEach(view => {
+    view.classList.remove('active');
+    view.classList.add('hidden');
+  });
+
+  // Show the requested view
+  const view = document.getElementById(`view-${viewId}`);
+  if(view) {
+    view.classList.remove('hidden');
+    view.classList.add('active');
+
+    // Load data for specific views
+    if(viewId === 'visits') {
+      loadVisits();
+    } else if(viewId === 'templates') {
+      loadTemplates();
+    } else if(viewId === 'settings') {
+      loadSettings();
+    } else if(viewId === 'scribe') {
+      loadTemplateDropdown();
+    } else if(viewId === 'invite') {
+      loadTeamMembers();
+    }
+  }
 }
 
 function showError(elementId, message) {
@@ -96,36 +128,32 @@ function login(email, password) {
 
   cognitoUser.authenticateUser(authenticationDetails, {
     onSuccess: (result) => {
-      console.log("✅ Login Successful! Switching to Dashboard...");
+      console.log("✅ Login Successful!");
 
       idToken = result.getIdToken().getJwtToken();
       currentUser = cognitoUser;
 
-      // Update UI with user email
-      cognitoUser.getUserAttributes((err, attributes) => {
-        if (!err) {
-          const emailAttr = attributes.find(attr => attr.Name === 'email');
-          const userEmail = emailAttr ? emailAttr.Value : email;
-          const emailEl = document.getElementById('user-email');
-          if(emailEl) emailEl.textContent = userEmail;
-        }
-      });
+      // Decode JWT to get role
+      const payload = JSON.parse(atob(idToken.split('.')[1]));
+      userRole = payload['custom:role'] || 'user';
+      userEmail = payload.email || email;
 
-      // ✅ FORCE UI SWITCH
-      const loginScreen = document.getElementById('login-screen');
-      const dashboardScreen = document.getElementById('dashboard-screen');
+      console.log("User role:", userRole);
+      console.log("User email:", userEmail);
 
-      if (loginScreen) {
-        loginScreen.classList.remove('active');
-        loginScreen.classList.add('hidden');
-        loginScreen.style.display = 'none';
+      // Update UI with user info
+      updateUserDisplay();
+
+      // Show admin features if admin
+      if(userRole === 'admin') {
+        document.querySelectorAll('.admin-only').forEach(el => {
+          el.style.display = 'flex';
+        });
       }
 
-      if (dashboardScreen) {
-        dashboardScreen.classList.remove('hidden');
-        dashboardScreen.classList.add('active');
-        dashboardScreen.style.display = 'flex';
-      }
+      // Switch to dashboard
+      showScreen('dashboard-screen');
+      showView('scribe');
     },
 
     onFailure: (err) => {
@@ -145,13 +173,34 @@ function logout() {
   }
   currentUser = null;
   idToken = null;
+  userRole = 'user';
+  userEmail = '';
   selectedPatient = null;
+  templatesCache = [];
+  visitsCache = [];
+
+  // Hide admin features
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = 'none';
+  });
 
   // Reset UI
   const results = document.getElementById('results-panel');
   if(results) results.classList.add('hidden');
 
   showScreen('login-screen');
+}
+
+function updateUserDisplay() {
+  const sidebarEmail = document.getElementById('sidebar-user-email');
+  const sidebarRole = document.getElementById('sidebar-user-role');
+  const settingsEmail = document.getElementById('settings-email');
+  const settingsRole = document.getElementById('settings-role');
+
+  if(sidebarEmail) sidebarEmail.textContent = userEmail;
+  if(sidebarRole) sidebarRole.textContent = userRole === 'admin' ? 'Administrator' : 'User';
+  if(settingsEmail) settingsEmail.value = userEmail;
+  if(settingsRole) settingsRole.value = userRole === 'admin' ? 'Administrator' : 'User';
 }
 
 // ============================================
@@ -169,14 +218,11 @@ function initiateForgotPassword(email) {
   };
 
   const cognitoUser = new CognitoUser(userData);
-
-  // Store email for the confirmation step
   resetEmail = email.trim();
 
   cognitoUser.forgotPassword({
     onSuccess: (data) => {
       console.log('✅ Verification code sent:', data);
-      // Move to the reset password screen
       showScreen('reset-password-screen');
     },
     onFailure: (err) => {
@@ -187,7 +233,6 @@ function initiateForgotPassword(email) {
 }
 
 function confirmNewPassword(verificationCode, newPassword, confirmPassword) {
-  // Validation
   if (!verificationCode || !verificationCode.trim()) {
     showError('reset-error', 'Please enter the verification code');
     return;
@@ -221,18 +266,14 @@ function confirmNewPassword(verificationCode, newPassword, confirmPassword) {
       console.log('✅ Password reset successful!');
       showSuccess('reset-success', 'Password reset successful! Redirecting to login...');
 
-      // Clear the stored email
       resetEmail = null;
 
-      // Clear input fields
       document.getElementById('verification-code').value = '';
       document.getElementById('new-password').value = '';
       document.getElementById('confirm-password').value = '';
 
-      // Redirect to login after 2 seconds
       setTimeout(() => {
         showScreen('login-screen');
-        // Clear success message
         const successEl = document.getElementById('reset-success');
         if (successEl) successEl.textContent = '';
       }, 2000);
@@ -242,6 +283,714 @@ function confirmNewPassword(verificationCode, newPassword, confirmPassword) {
       showError('reset-error', err.message || 'Failed to reset password');
     }
   });
+}
+
+// ============================================
+// Change Password (from Settings)
+// ============================================
+function changePassword(currentPassword, newPassword, confirmPassword) {
+  if (!currentPassword) {
+    showError('password-change-error', 'Please enter your current password');
+    return;
+  }
+
+  if (!newPassword || newPassword.length < 8) {
+    showError('password-change-error', 'New password must be at least 8 characters');
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    showError('password-change-error', 'New passwords do not match');
+    return;
+  }
+
+  if (!currentUser) {
+    showError('password-change-error', 'Not logged in');
+    return;
+  }
+
+  currentUser.changePassword(currentPassword, newPassword, (err, result) => {
+    if (err) {
+      console.error('Password change error:', err);
+      showError('password-change-error', err.message || 'Failed to change password');
+    } else {
+      console.log('Password changed successfully');
+      showSuccess('password-change-success', 'Password changed successfully!');
+
+      // Clear fields
+      document.getElementById('current-password').value = '';
+      document.getElementById('settings-new-password').value = '';
+      document.getElementById('settings-confirm-password').value = '';
+    }
+  });
+}
+
+// ============================================
+// Templates Functions
+// ============================================
+async function loadTemplates() {
+  const list = document.getElementById('templates-list');
+  if(!list) return;
+
+  list.innerHTML = `
+    <div class="loading-spinner">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+      <span>Loading templates...</span>
+    </div>
+  `;
+
+  try {
+    const response = await fetch(`${MAIN_API}/templates`, {
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+
+    if (!response.ok) throw new Error('Failed to load templates');
+
+    const data = await response.json();
+    templatesCache = data.templates || [];
+
+    renderTemplates();
+  } catch (error) {
+    console.error('Error loading templates:', error);
+
+    // Show default templates if API fails
+    templatesCache = getDefaultTemplates();
+    renderTemplates();
+  }
+}
+
+function getDefaultTemplates() {
+  return [
+    {
+      template_id: 'default_soap',
+      name: 'SOAP General',
+      description: 'Standard SOAP format for general dentistry visits',
+      is_default: true,
+      example_output: `SUBJECTIVE:
+Patient presents for [reason]. Reports [symptoms/concerns].
+
+OBJECTIVE:
+Exam findings: [clinical observations]
+Teeth examined: [tooth numbers]
+Radiographs: [if applicable]
+
+ASSESSMENT:
+[Diagnosis and clinical impression]
+
+PLAN:
+1. [Treatment performed]
+2. [Follow-up recommendations]
+3. [Next appointment]`
+    },
+    {
+      template_id: 'default_hygiene',
+      name: 'Hygiene Recall',
+      description: 'Template for routine cleaning and hygiene visits',
+      is_default: true,
+      example_output: `SUBJECTIVE:
+Patient presents for routine prophylaxis. [Any concerns reported]
+
+OBJECTIVE:
+Probing depths: [findings]
+Bleeding on probing: [yes/no, locations]
+Plaque score: [percentage]
+Calculus: [light/moderate/heavy]
+
+ASSESSMENT:
+[Periodontal status]
+
+PLAN:
+1. Prophylaxis completed
+2. Fluoride treatment: [yes/no]
+3. OHI provided
+4. Return in [timeframe]`
+    }
+  ];
+}
+
+function renderTemplates() {
+  const list = document.getElementById('templates-list');
+  if(!list) return;
+
+  if(templatesCache.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-solid fa-file-lines"></i>
+        <p>No templates yet. Create your first template!</p>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = templatesCache.map(template => `
+    <div class="template-card" data-id="${template.template_id}">
+      <div class="template-card-header">
+        <span class="template-name">${template.name}</span>
+        <span class="template-badge ${template.is_default ? 'default' : 'custom'}">
+          ${template.is_default ? 'Default' : 'Custom'}
+        </span>
+      </div>
+      <p class="template-description">${template.description || 'No description'}</p>
+      <div class="template-preview">${template.example_output || ''}</div>
+      <div class="template-actions">
+        <button class="btn-edit" onclick="editTemplate('${template.template_id}')">
+          <i class="fa-solid fa-pen"></i> Edit
+        </button>
+        ${!template.is_default ? `
+          <button class="btn-delete" onclick="deleteTemplate('${template.template_id}')">
+            <i class="fa-solid fa-trash"></i> Delete
+          </button>
+        ` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadTemplateDropdown() {
+  const select = document.getElementById('template-select');
+  if(!select) return;
+
+  try {
+    const response = await fetch(`${MAIN_API}/templates`, {
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+
+    if (!response.ok) throw new Error('Failed to load templates');
+
+    const data = await response.json();
+    const templates = data.templates || getDefaultTemplates();
+
+    select.innerHTML = templates.map(t =>
+      `<option value="${t.template_id}">${t.name}</option>`
+    ).join('');
+
+  } catch (error) {
+    console.error('Error loading template dropdown:', error);
+
+    // Fallback to defaults
+    const defaults = getDefaultTemplates();
+    select.innerHTML = defaults.map(t =>
+      `<option value="${t.template_id}">${t.name}</option>`
+    ).join('');
+  }
+}
+
+function openTemplateModal(templateId = null) {
+  editingTemplateId = templateId;
+  const modal = document.getElementById('template-modal');
+  const title = document.getElementById('template-modal-title');
+  const nameInput = document.getElementById('template-name');
+  const descInput = document.getElementById('template-description');
+  const exampleInput = document.getElementById('template-example');
+
+  if(templateId) {
+    title.textContent = 'Edit Template';
+    const template = templatesCache.find(t => t.template_id === templateId);
+    if(template) {
+      nameInput.value = template.name || '';
+      descInput.value = template.description || '';
+      exampleInput.value = template.example_output || '';
+    }
+  } else {
+    title.textContent = 'New Template';
+    nameInput.value = '';
+    descInput.value = '';
+    exampleInput.value = '';
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeTemplateModal() {
+  const modal = document.getElementById('template-modal');
+  modal.classList.add('hidden');
+  editingTemplateId = null;
+}
+
+async function saveTemplate() {
+  const nameInput = document.getElementById('template-name');
+  const descInput = document.getElementById('template-description');
+  const exampleInput = document.getElementById('template-example');
+
+  const name = nameInput.value.trim();
+  const description = descInput.value.trim();
+  const example_output = exampleInput.value.trim();
+
+  if(!name) {
+    alert('Please enter a template name');
+    return;
+  }
+
+  if(!example_output) {
+    alert('Please provide an example note');
+    return;
+  }
+
+  try {
+    const method = editingTemplateId ? 'PUT' : 'POST';
+    const url = editingTemplateId
+      ? `${MAIN_API}/templates/${editingTemplateId}`
+      : `${MAIN_API}/templates`;
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ name, description, example_output })
+    });
+
+    if(!response.ok) throw new Error('Failed to save template');
+
+    closeTemplateModal();
+    loadTemplates();
+    loadTemplateDropdown();
+
+  } catch (error) {
+    console.error('Error saving template:', error);
+    alert('Failed to save template: ' + error.message);
+  }
+}
+
+async function deleteTemplate(templateId) {
+  if(!confirm('Are you sure you want to delete this template?')) return;
+
+  try {
+    const response = await fetch(`${MAIN_API}/templates/${templateId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+
+    if(!response.ok) throw new Error('Failed to delete template');
+
+    loadTemplates();
+    loadTemplateDropdown();
+
+  } catch (error) {
+    console.error('Error deleting template:', error);
+    alert('Failed to delete template: ' + error.message);
+  }
+}
+
+// Make functions globally available for onclick handlers
+window.editTemplate = (id) => openTemplateModal(id);
+window.deleteTemplate = deleteTemplate;
+
+// ============================================
+// Visits Functions
+// ============================================
+async function loadVisits() {
+  const list = document.getElementById('visits-list');
+  if(!list) return;
+
+  list.innerHTML = `
+    <div class="loading-spinner">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+      <span>Loading visits...</span>
+    </div>
+  `;
+
+  try {
+    // Admin gets all visits, users get their own
+    const url = userRole === 'admin'
+      ? `${MAIN_API}/notes?all=true`
+      : `${MAIN_API}/notes`;
+
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+
+    if (!response.ok) throw new Error('Failed to load visits');
+
+    const data = await response.json();
+    visitsCache = data.notes || [];
+
+    renderVisits();
+  } catch (error) {
+    console.error('Error loading visits:', error);
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-solid fa-exclamation-circle"></i>
+        <p>Failed to load visits. Please try again.</p>
+      </div>
+    `;
+  }
+}
+
+function renderVisits(filter = 'all', searchQuery = '') {
+  const list = document.getElementById('visits-list');
+  if(!list) return;
+
+  let filtered = [...visitsCache];
+
+  // Apply search filter
+  if(searchQuery) {
+    const query = searchQuery.toLowerCase();
+    filtered = filtered.filter(v =>
+      (v.patient_name || '').toLowerCase().includes(query)
+    );
+  }
+
+  // Apply time filter
+  const now = new Date();
+  if(filter === 'today') {
+    filtered = filtered.filter(v => {
+      const date = new Date(v.timestamp);
+      return date.toDateString() === now.toDateString();
+    });
+  } else if(filter === 'week') {
+    const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    filtered = filtered.filter(v => new Date(v.timestamp) >= weekAgo);
+  } else if(filter === 'month') {
+    const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+    filtered = filtered.filter(v => new Date(v.timestamp) >= monthAgo);
+  }
+
+  if(filtered.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-solid fa-clipboard"></i>
+        <p>No visits found</p>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = filtered.map(visit => {
+    const date = new Date(visit.timestamp);
+    const formattedDate = date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    const formattedTime = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+
+    return `
+      <div class="visit-card" data-id="${visit.user_id}#${visit.timestamp}">
+        <div class="visit-icon">
+          <i class="fa-solid fa-notes-medical"></i>
+        </div>
+        <div class="visit-info">
+          <div class="visit-patient">${visit.patient_name || 'Unknown Patient'}</div>
+          <div class="visit-meta">
+            <span><i class="fa-regular fa-calendar"></i> ${formattedDate}</span>
+            <span><i class="fa-regular fa-clock"></i> ${formattedTime}</span>
+            ${userRole === 'admin' && visit.provider_email ? `
+              <span><i class="fa-regular fa-user"></i> ${visit.provider_email}</span>
+            ` : ''}
+          </div>
+        </div>
+        <div class="visit-actions">
+          <button class="btn-view" onclick="viewVisit('${visit.user_id}', '${visit.timestamp}')">
+            View
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function viewVisit(userId, timestamp) {
+  const visit = visitsCache.find(v =>
+    v.user_id === userId && v.timestamp === timestamp
+  );
+
+  if(!visit) return;
+
+  const modal = document.getElementById('visit-modal');
+  const title = document.getElementById('visit-modal-title');
+  const transcript = document.getElementById('visit-transcript');
+  const note = document.getElementById('visit-note');
+
+  title.textContent = visit.patient_name || 'Visit Details';
+  transcript.textContent = visit.transcript || 'No transcript available';
+  note.textContent = visit.soap_note || 'No note available';
+
+  modal.classList.remove('hidden');
+}
+
+window.viewVisit = viewVisit;
+
+function closeVisitModal() {
+  const modal = document.getElementById('visit-modal');
+  modal.classList.add('hidden');
+}
+
+// ============================================
+// Settings Functions
+// ============================================
+function loadSettings() {
+  updateUserDisplay();
+}
+
+// ============================================
+// Invite Team Functions
+// ============================================
+async function sendInvite() {
+  const emailInput = document.getElementById('invite-email');
+  const nameInput = document.getElementById('invite-name');
+  const roleSelect = document.getElementById('invite-role');
+
+  const email = emailInput?.value.trim();
+  const name = nameInput?.value.trim();
+  const role = roleSelect?.value || 'user';
+
+  if (!email) {
+    showError('invite-error', 'Please enter an email address');
+    return;
+  }
+
+  if (!name) {
+    showError('invite-error', 'Please enter a name');
+    return;
+  }
+
+  // Email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    showError('invite-error', 'Please enter a valid email address');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${MAIN_API}/admin/invite`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ email, name, role })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to send invitation');
+    }
+
+    showSuccess('invite-success', `Invitation sent to ${email}!`);
+
+    // Clear form
+    emailInput.value = '';
+    nameInput.value = '';
+    roleSelect.value = 'user';
+
+    // Refresh team list
+    loadTeamMembers();
+
+  } catch (error) {
+    console.error('Invite error:', error);
+    showError('invite-error', error.message);
+  }
+}
+
+async function loadTeamMembers() {
+  const list = document.getElementById('team-members-list');
+  if (!list) return;
+
+  list.innerHTML = `
+    <div class="loading-spinner">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+      <span>Loading team...</span>
+    </div>
+  `;
+
+  try {
+    const response = await fetch(`${MAIN_API}/admin/users`, {
+      headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+
+    if (!response.ok) throw new Error('Failed to load team');
+
+    const data = await response.json();
+    const users = data.users || [];
+
+    if (users.length === 0) {
+      list.innerHTML = `
+        <div class="empty-state">
+          <i class="fa-solid fa-users"></i>
+          <p>No team members yet</p>
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = users.map(user => {
+      const initials = (user.name || user.email || '??')
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .substring(0, 2);
+
+      const status = user.status || 'active';
+      const badgeClass = user.role === 'admin' ? 'admin' : (status === 'pending' ? 'pending' : 'user');
+      const badgeText = status === 'pending' ? 'Pending' : (user.role === 'admin' ? 'Admin' : 'User');
+
+      return `
+        <div class="team-member-card">
+          <div class="team-member-avatar">${initials}</div>
+          <div class="team-member-info">
+            <div class="team-member-name">${user.name || 'No Name'}</div>
+            <div class="team-member-email">${user.email}</div>
+          </div>
+          <span class="team-member-badge ${badgeClass}">${badgeText}</span>
+        </div>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('Error loading team:', error);
+    list.innerHTML = `
+      <div class="empty-state">
+        <i class="fa-solid fa-exclamation-circle"></i>
+        <p>Failed to load team members</p>
+      </div>
+    `;
+  }
+}
+
+// ============================================
+// Mic Test Functions
+// ============================================
+async function openMicTestModal() {
+  const modal = document.getElementById('mic-test-modal');
+  const micSelect = document.getElementById('mic-select');
+
+  modal.classList.remove('hidden');
+
+  // Enumerate audio devices
+  try {
+    // Request permission first
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(track => track.stop());
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+    micSelect.innerHTML = audioInputs.map((device, index) =>
+      `<option value="${device.deviceId}">${device.label || `Microphone ${index + 1}`}</option>`
+    ).join('');
+
+    // Select previously chosen mic or default
+    if (selectedMicId) {
+      micSelect.value = selectedMicId;
+    }
+
+    // Start testing with selected mic
+    startMicTest(micSelect.value);
+
+  } catch (error) {
+    console.error('Mic access error:', error);
+    micSelect.innerHTML = '<option value="">Microphone access denied</option>';
+    updateMicStatus(false, 'Please allow microphone access');
+  }
+}
+
+function closeMicTestModal() {
+  const modal = document.getElementById('mic-test-modal');
+  modal.classList.add('hidden');
+  stopMicTest();
+}
+
+async function startMicTest(deviceId) {
+  // Stop any existing test
+  stopMicTest();
+
+  try {
+    const constraints = {
+      audio: {
+        deviceId: deviceId ? { exact: deviceId } : undefined,
+        echoCancellation: true,
+        noiseSuppression: true
+      }
+    };
+
+    micTestStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    // Create audio context and analyser
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(micTestStream);
+    micAnalyser = audioContext.createAnalyser();
+    micAnalyser.fftSize = 256;
+    source.connect(micAnalyser);
+
+    // Store selected mic
+    selectedMicId = deviceId;
+
+    // Start visualizing
+    visualizeMicLevel();
+
+    updateMicStatus(true, 'Microphone ready');
+
+  } catch (error) {
+    console.error('Mic test error:', error);
+    updateMicStatus(false, 'Could not access microphone');
+  }
+}
+
+function stopMicTest() {
+  if (micAnimationFrame) {
+    cancelAnimationFrame(micAnimationFrame);
+    micAnimationFrame = null;
+  }
+
+  if (micTestStream) {
+    micTestStream.getTracks().forEach(track => track.stop());
+    micTestStream = null;
+  }
+
+  micAnalyser = null;
+
+  // Reset level bar
+  const fill = document.getElementById('mic-level-fill');
+  const value = document.getElementById('mic-level-value');
+  if (fill) fill.style.width = '0%';
+  if (value) value.textContent = '0%';
+}
+
+function visualizeMicLevel() {
+  if (!micAnalyser) return;
+
+  const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
+
+  function update() {
+    if (!micAnalyser) return;
+
+    micAnalyser.getByteFrequencyData(dataArray);
+
+    // Calculate average volume
+    const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+    const percentage = Math.min(100, Math.round((average / 128) * 100));
+
+    // Update UI
+    const fill = document.getElementById('mic-level-fill');
+    const value = document.getElementById('mic-level-value');
+
+    if (fill) fill.style.width = `${percentage}%`;
+    if (value) value.textContent = `${percentage}%`;
+
+    micAnimationFrame = requestAnimationFrame(update);
+  }
+
+  update();
+}
+
+function updateMicStatus(isGood, message) {
+  const status = document.getElementById('mic-status');
+  if (!status) return;
+
+  if (isGood) {
+    status.className = 'mic-status';
+    status.innerHTML = `<i class="fa-solid fa-circle-check"></i><span>${message}</span>`;
+  } else {
+    status.className = 'mic-status error';
+    status.innerHTML = `<i class="fa-solid fa-circle-xmark"></i><span>${message}</span>`;
+  }
 }
 
 // ============================================
@@ -278,7 +1027,6 @@ async function showPatientResults(query) {
   resultsDiv.innerHTML = '';
   resultsDiv.style.display = 'block';
 
-  // Existing patients
   patients.forEach(patient => {
     const item = document.createElement('div');
     item.className = 'patient-result-item';
@@ -287,7 +1035,6 @@ async function showPatientResults(query) {
     resultsDiv.appendChild(item);
   });
 
-  // Create new option
   const addNew = document.createElement('div');
   addNew.className = 'patient-result-item add-new';
   addNew.innerHTML = `<i class="fa-solid fa-plus"></i> Create: "${query}"`;
@@ -336,18 +1083,21 @@ async function startRecording() {
   }
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    const constraints = {
       audio: {
+        deviceId: selectedMicId ? { exact: selectedMicId } : undefined,
         channelCount: 1,
         echoCancellation: true,
         noiseSuppression: true,
         sampleRate: 16000
       }
-    });
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
     const options = { mimeType: 'audio/webm;codecs=opus', bitsPerSecond: 16000 };
     if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      delete options.mimeType; // Fallback
+      delete options.mimeType;
     }
 
     mediaRecorder = new MediaRecorder(stream, options);
@@ -365,24 +1115,19 @@ async function startRecording() {
 
     mediaRecorder.start(1000);
 
-    // --- UI UPDATES ---
     const recordBtn = document.getElementById('record-btn');
     const status = document.getElementById('recording-status');
     const resultsPanel = document.getElementById('results-panel');
 
-    // 1. Animate Button
     if(recordBtn) {
       recordBtn.classList.add('recording');
       recordBtn.innerHTML = '<i class="fa-solid fa-stop"></i>';
     }
 
-    // 2. Update Status Text
     if(status) status.textContent = 'Recording in progress...';
 
-    // 3. ✅ SHOW RESULTS PANEL IMMEDIATELY
     if(resultsPanel) {
-        resultsPanel.classList.remove('hidden');
-        resultsPanel.style.display = 'grid'; // Ensure grid layout is respected
+      resultsPanel.classList.remove('hidden');
     }
 
   } catch (error) {
@@ -431,11 +1176,9 @@ async function transcribeAudio(audioBlob) {
     const data = await response.json();
     const transcript = data.transcript;
 
-    // Show Transcript
     const transcriptEl = document.getElementById('transcript');
     if(transcriptEl) transcriptEl.value = transcript;
 
-    // Update Status
     const status = document.getElementById('recording-status');
     if(status) status.textContent = 'Generating Clinical Note...';
 
@@ -450,9 +1193,8 @@ async function transcribeAudio(audioBlob) {
 
 async function generateVisitSummary(transcript) {
   try {
-    // Get Template Selection
     const templateSelect = document.getElementById('template-select');
-    const template = templateSelect ? templateSelect.value : 'soap_general';
+    const template = templateSelect ? templateSelect.value : 'default_soap';
 
     const response = await fetch(`${MAIN_API}/generate-note`, {
       method: 'POST',
@@ -464,18 +1206,16 @@ async function generateVisitSummary(transcript) {
         transcript: transcript,
         patient_name: selectedPatient ? selectedPatient.name : 'Unknown',
         patient_id: selectedPatient ? selectedPatient.patient_id : null,
-        template: template
+        template_id: template
       })
     });
 
     if (!response.ok) throw new Error('Generation failed');
     const data = await response.json();
 
-    // Show Note
     const soapEl = document.getElementById('soap-note');
     if(soapEl) soapEl.innerHTML = `<pre>${data.note}</pre>`;
 
-    // Final Status
     const status = document.getElementById('recording-status');
     if(status) status.textContent = 'Note Generated Successfully';
 
@@ -489,10 +1229,10 @@ async function generateVisitSummary(transcript) {
 // Initialization & Listeners
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
-  console.log("🚀 App Loaded. initializing listeners...");
+  console.log("🚀 Scribe32 App Loaded");
 
   // ============================================
-  // Helper: Handle Login Submission
+  // Login Handlers
   // ============================================
   function handleLoginSubmit() {
     const emailInput = document.getElementById('email');
@@ -510,34 +1250,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ============================================
-  // Helper: Handle Forgot Password Submission
-  // ============================================
-  function handleForgotSubmit() {
-    const forgotEmailInput = document.getElementById('forgot-email');
-    if (forgotEmailInput) {
-      initiateForgotPassword(forgotEmailInput.value);
-    }
-  }
-
-  // ============================================
-  // Helper: Handle Reset Password Submission
-  // ============================================
-  function handleResetSubmit() {
-    const codeInput = document.getElementById('verification-code');
-    const newPassInput = document.getElementById('new-password');
-    const confirmPassInput = document.getElementById('confirm-password');
-
-    if (codeInput && newPassInput && confirmPassInput) {
-      confirmNewPassword(
-        codeInput.value,
-        newPassInput.value,
-        confirmPassInput.value
-      );
-    }
-  }
-
-  // 1. Login Button Click
   const loginBtn = document.getElementById('login-btn');
   if (loginBtn) {
     loginBtn.addEventListener('click', (e) => {
@@ -546,144 +1258,99 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 1b. Login Enter Key Support
-  const emailInput = document.getElementById('email');
-  const passwordInput = document.getElementById('password');
+  // Login Enter Key Support
+  ['email', 'password'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleLoginSubmit();
+        }
+      });
+    }
+  });
 
-  if (emailInput) {
-    emailInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleLoginSubmit();
-      }
-    });
-  }
-
-  if (passwordInput) {
-    passwordInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleLoginSubmit();
-      }
-    });
-  }
-
-  // 2. Logout Logic
+  // Logout
   const logoutBtn = document.getElementById('logout-btn');
   if(logoutBtn) logoutBtn.addEventListener('click', logout);
 
-  // 3. Forgot Password Link
+  // ============================================
+  // Forgot Password Handlers
+  // ============================================
   const forgotPasswordLink = document.getElementById('forgot-password-link');
-  console.log("🔍 Forgot password link element:", forgotPasswordLink);
-
   if (forgotPasswordLink) {
     forgotPasswordLink.addEventListener('click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
-      console.log("✅ Forgot password clicked!");
-
-      // Pre-fill email if already entered
       const emailInput = document.getElementById('email');
       const forgotEmailInput = document.getElementById('forgot-email');
       if (emailInput && forgotEmailInput && emailInput.value) {
         forgotEmailInput.value = emailInput.value;
       }
       showScreen('forgot-password-screen');
-      // In the forgot password click handler, add this after showScreen():
-forgotPasswordLink.addEventListener('click', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  console.log("✅ Forgot password clicked!");
-
-  // Pre-fill email if already entered
-  const emailInput = document.getElementById('email');
-  const forgotEmailInput = document.getElementById('forgot-email');
-  if (emailInput && forgotEmailInput && emailInput.value) {
-    forgotEmailInput.value = emailInput.value;
-  }
-  showScreen('forgot-password-screen');
-
-  // ADD THIS DEBUG:
-  const fpScreen = document.getElementById('forgot-password-screen');
-  console.log("After showScreen - classes:", fpScreen.className);
-  console.log("After showScreen - display:", fpScreen.style.display);
-  console.log("After showScreen - computed display:", window.getComputedStyle(fpScreen).display);
-  // Add this right after the other debug lines:
-const loginScreen = document.getElementById('login-screen');
-console.log("Login screen - classes:", loginScreen.className);
-console.log("Login screen - computed display:", window.getComputedStyle(loginScreen).display);
-});
     });
-  } else {
-    console.error("❌ Could not find forgot-password-link element!");
   }
 
-  // 4. Send Verification Code Button
   const sendCodeBtn = document.getElementById('send-code-btn');
   if (sendCodeBtn) {
     sendCodeBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      handleForgotSubmit();
-    });
-  }
-
-  // 4b. Forgot Password Enter Key Support
-  const forgotEmailInput = document.getElementById('forgot-email');
-  if (forgotEmailInput) {
-    forgotEmailInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleForgotSubmit();
+      const forgotEmailInput = document.getElementById('forgot-email');
+      if (forgotEmailInput) {
+        initiateForgotPassword(forgotEmailInput.value);
       }
     });
   }
 
-  // 5. Reset Password Button
   const resetPasswordBtn = document.getElementById('reset-password-btn');
   if (resetPasswordBtn) {
     resetPasswordBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      handleResetSubmit();
+      confirmNewPassword(
+        document.getElementById('verification-code')?.value,
+        document.getElementById('new-password')?.value,
+        document.getElementById('confirm-password')?.value
+      );
     });
   }
 
-  // 5b. Reset Password Enter Key Support
-  const verificationCodeInput = document.getElementById('verification-code');
-  const newPasswordInput = document.getElementById('new-password');
-  const confirmPasswordInput = document.getElementById('confirm-password');
-
-  [verificationCodeInput, newPasswordInput, confirmPasswordInput].forEach(input => {
-    if (input) {
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          handleResetSubmit();
-        }
+  // Back to Login Links
+  ['back-to-login-1', 'back-to-login-2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        resetEmail = null;
+        showScreen('login-screen');
       });
     }
   });
 
-  // 6. Back to Login Links
-  const backToLogin1 = document.getElementById('back-to-login-1');
-  const backToLogin2 = document.getElementById('back-to-login-2');
-
-  if (backToLogin1) {
-    backToLogin1.addEventListener('click', (e) => {
+  // ============================================
+  // Sidebar Navigation
+  // ============================================
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', (e) => {
       e.preventDefault();
-      resetEmail = null;
-      showScreen('login-screen');
+      const view = item.dataset.view;
+      if(view) {
+        showView(view);
+      }
+    });
+  });
+
+  // Sidebar Toggle
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebar = document.getElementById('sidebar');
+  if(sidebarToggle && sidebar) {
+    sidebarToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
     });
   }
 
-  if (backToLogin2) {
-    backToLogin2.addEventListener('click', (e) => {
-      e.preventDefault();
-      resetEmail = null;
-      showScreen('login-screen');
-    });
-  }
-
-  // 7. Patient Search Logic
+  // ============================================
+  // Patient Search
+  // ============================================
   const patientSearch = document.getElementById('patient-search');
   let searchTimeout;
   if(patientSearch) {
@@ -692,7 +1359,6 @@ console.log("Login screen - computed display:", window.getComputedStyle(loginScr
       searchTimeout = setTimeout(() => showPatientResults(e.target.value), 300);
     });
 
-    // Close results when clicking outside
     document.addEventListener('click', (e) => {
       const results = document.getElementById('patient-results');
       if (results && !e.target.closest('.card-row')) {
@@ -701,7 +1367,9 @@ console.log("Login screen - computed display:", window.getComputedStyle(loginScr
     });
   }
 
-  // 8. Record Button Logic
+  // ============================================
+  // Recording
+  // ============================================
   const recordBtn = document.getElementById('record-btn');
   if(recordBtn) {
     recordBtn.addEventListener('click', () => {
@@ -713,7 +1381,7 @@ console.log("Login screen - computed display:", window.getComputedStyle(loginScr
     });
   }
 
-  // 9. Copy Button Logic
+  // Copy Button
   const copyBtn = document.getElementById('copy-btn');
   if(copyBtn) {
     copyBtn.addEventListener('click', () => {
@@ -723,6 +1391,113 @@ console.log("Login screen - computed display:", window.getComputedStyle(loginScr
         copyBtn.textContent = 'Copied!';
         setTimeout(() => copyBtn.textContent = 'Copy', 2000);
       }
+    });
+  }
+
+  // ============================================
+  // Templates Modal
+  // ============================================
+  const addTemplateBtn = document.getElementById('add-template-btn');
+  if(addTemplateBtn) {
+    addTemplateBtn.addEventListener('click', () => openTemplateModal());
+  }
+
+  const closeTemplateModalBtn = document.getElementById('close-template-modal');
+  if(closeTemplateModalBtn) {
+    closeTemplateModalBtn.addEventListener('click', closeTemplateModal);
+  }
+
+  const cancelTemplateBtn = document.getElementById('cancel-template-btn');
+  if(cancelTemplateBtn) {
+    cancelTemplateBtn.addEventListener('click', closeTemplateModal);
+  }
+
+  const saveTemplateBtn = document.getElementById('save-template-btn');
+  if(saveTemplateBtn) {
+    saveTemplateBtn.addEventListener('click', saveTemplate);
+  }
+
+  // ============================================
+  // Visits Modal
+  // ============================================
+  const closeVisitModalBtn = document.getElementById('close-visit-modal');
+  if(closeVisitModalBtn) {
+    closeVisitModalBtn.addEventListener('click', closeVisitModal);
+  }
+
+  // Visits Filters
+  const visitsSearch = document.getElementById('visits-search');
+  const visitsFilter = document.getElementById('visits-filter');
+
+  if(visitsSearch) {
+    visitsSearch.addEventListener('input', (e) => {
+      renderVisits(visitsFilter?.value || 'all', e.target.value);
+    });
+  }
+
+  if(visitsFilter) {
+    visitsFilter.addEventListener('change', (e) => {
+      renderVisits(e.target.value, visitsSearch?.value || '');
+    });
+  }
+
+  // ============================================
+  // Settings - Change Password
+  // ============================================
+  const changePasswordBtn = document.getElementById('change-password-btn');
+  if(changePasswordBtn) {
+    changePasswordBtn.addEventListener('click', () => {
+      changePassword(
+        document.getElementById('current-password')?.value,
+        document.getElementById('settings-new-password')?.value,
+        document.getElementById('settings-confirm-password')?.value
+      );
+    });
+  }
+
+  // Close modals on outside click
+  document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if(e.target === modal) {
+        modal.classList.add('hidden');
+        // Stop mic test if closing mic modal
+        if(modal.id === 'mic-test-modal') {
+          stopMicTest();
+        }
+      }
+    });
+  });
+
+  // ============================================
+  // Invite Team
+  // ============================================
+  const sendInviteBtn = document.getElementById('send-invite-btn');
+  if(sendInviteBtn) {
+    sendInviteBtn.addEventListener('click', sendInvite);
+  }
+
+  // ============================================
+  // Mic Test
+  // ============================================
+  const testMicBtn = document.getElementById('test-mic-btn');
+  if(testMicBtn) {
+    testMicBtn.addEventListener('click', openMicTestModal);
+  }
+
+  const closeMicModalBtn = document.getElementById('close-mic-modal');
+  if(closeMicModalBtn) {
+    closeMicModalBtn.addEventListener('click', closeMicTestModal);
+  }
+
+  const micTestDoneBtn = document.getElementById('mic-test-done-btn');
+  if(micTestDoneBtn) {
+    micTestDoneBtn.addEventListener('click', closeMicTestModal);
+  }
+
+  const micSelect = document.getElementById('mic-select');
+  if(micSelect) {
+    micSelect.addEventListener('change', (e) => {
+      startMicTest(e.target.value);
     });
   }
 });
