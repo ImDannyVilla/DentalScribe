@@ -32,9 +32,18 @@ body {
 /* =========================================
    2. VISIBILITY UTILS
    ========================================= */
-.screen { display: none !important; width: 100%; height: 100%; }
-.screen.active { display: flex !important; flex-direction: column; }
-.hidden { display: none !important; }
+.screen {
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+.screen.active {
+  display: flex !important;
+  flex-direction: column;
+}
+.hidden {
+  display: none;
+}
 
 /* =========================================
    3. LOGIN & AUTH SCREENS (CENTERED)

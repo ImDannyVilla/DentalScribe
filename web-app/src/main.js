@@ -32,6 +32,8 @@ let resetEmail = null; // Store email for password reset flow
 // UI Management
 // ============================================
 function showScreen(screenId) {
+  console.log("🔄 showScreen called with:", screenId);
+
   // Hide all screens first
   document.querySelectorAll('.screen').forEach(screen => {
     screen.classList.remove('active');
@@ -41,6 +43,8 @@ function showScreen(screenId) {
 
   // Show the requested screen
   const screen = document.getElementById(screenId);
+  console.log("🔍 Found screen element:", screen);
+
   if(screen) {
     screen.classList.remove('hidden');
     screen.classList.add('active');
@@ -51,6 +55,8 @@ function showScreen(screenId) {
     } else {
         screen.style.display = 'block'; // Dashboard uses block/flex internal
     }
+  } else {
+    console.error("❌ Screen not found:", screenId);
   }
 }
 
@@ -485,23 +491,79 @@ async function generateVisitSummary(transcript) {
 document.addEventListener('DOMContentLoaded', () => {
   console.log("🚀 App Loaded. initializing listeners...");
 
-  // 1. Login Logic
+  // ============================================
+  // Helper: Handle Login Submission
+  // ============================================
+  function handleLoginSubmit() {
+    const emailInput = document.getElementById('email');
+    const passInput = document.getElementById('password');
+
+    if (!emailInput || !passInput) return;
+
+    const email = emailInput.value.trim();
+    const password = passInput.value;
+
+    if (email && password) {
+      login(email, password);
+    } else {
+      alert('Please enter both email and password');
+    }
+  }
+
+  // ============================================
+  // Helper: Handle Forgot Password Submission
+  // ============================================
+  function handleForgotSubmit() {
+    const forgotEmailInput = document.getElementById('forgot-email');
+    if (forgotEmailInput) {
+      initiateForgotPassword(forgotEmailInput.value);
+    }
+  }
+
+  // ============================================
+  // Helper: Handle Reset Password Submission
+  // ============================================
+  function handleResetSubmit() {
+    const codeInput = document.getElementById('verification-code');
+    const newPassInput = document.getElementById('new-password');
+    const confirmPassInput = document.getElementById('confirm-password');
+
+    if (codeInput && newPassInput && confirmPassInput) {
+      confirmNewPassword(
+        codeInput.value,
+        newPassInput.value,
+        confirmPassInput.value
+      );
+    }
+  }
+
+  // 1. Login Button Click
   const loginBtn = document.getElementById('login-btn');
   if (loginBtn) {
     loginBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      const emailInput = document.getElementById('email');
-      const passInput = document.getElementById('password');
+      handleLoginSubmit();
+    });
+  }
 
-      if (!emailInput || !passInput) return;
+  // 1b. Login Enter Key Support
+  const emailInput = document.getElementById('email');
+  const passwordInput = document.getElementById('password');
 
-      const email = emailInput.value.trim();
-      const password = passInput.value;
+  if (emailInput) {
+    emailInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleLoginSubmit();
+      }
+    });
+  }
 
-      if (email && password) {
-        login(email, password);
-      } else {
-        alert('Please enter both email and password');
+  if (passwordInput) {
+    passwordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleLoginSubmit();
       }
     });
   }
@@ -512,9 +574,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 3. Forgot Password Link
   const forgotPasswordLink = document.getElementById('forgot-password-link');
+  console.log("🔍 Forgot password link element:", forgotPasswordLink);
+
   if (forgotPasswordLink) {
     forgotPasswordLink.addEventListener('click', (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      console.log("✅ Forgot password clicked!");
+
       // Pre-fill email if already entered
       const emailInput = document.getElementById('email');
       const forgotEmailInput = document.getElementById('forgot-email');
@@ -522,7 +589,33 @@ document.addEventListener('DOMContentLoaded', () => {
         forgotEmailInput.value = emailInput.value;
       }
       showScreen('forgot-password-screen');
+      // In the forgot password click handler, add this after showScreen():
+forgotPasswordLink.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  console.log("✅ Forgot password clicked!");
+
+  // Pre-fill email if already entered
+  const emailInput = document.getElementById('email');
+  const forgotEmailInput = document.getElementById('forgot-email');
+  if (emailInput && forgotEmailInput && emailInput.value) {
+    forgotEmailInput.value = emailInput.value;
+  }
+  showScreen('forgot-password-screen');
+
+  // ADD THIS DEBUG:
+  const fpScreen = document.getElementById('forgot-password-screen');
+  console.log("After showScreen - classes:", fpScreen.className);
+  console.log("After showScreen - display:", fpScreen.style.display);
+  console.log("After showScreen - computed display:", window.getComputedStyle(fpScreen).display);
+  // Add this right after the other debug lines:
+const loginScreen = document.getElementById('login-screen');
+console.log("Login screen - classes:", loginScreen.className);
+console.log("Login screen - computed display:", window.getComputedStyle(loginScreen).display);
+});
     });
+  } else {
+    console.error("❌ Could not find forgot-password-link element!");
   }
 
   // 4. Send Verification Code Button
@@ -530,9 +623,17 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sendCodeBtn) {
     sendCodeBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      const forgotEmailInput = document.getElementById('forgot-email');
-      if (forgotEmailInput) {
-        initiateForgotPassword(forgotEmailInput.value);
+      handleForgotSubmit();
+    });
+  }
+
+  // 4b. Forgot Password Enter Key Support
+  const forgotEmailInput = document.getElementById('forgot-email');
+  if (forgotEmailInput) {
+    forgotEmailInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleForgotSubmit();
       }
     });
   }
@@ -542,19 +643,25 @@ document.addEventListener('DOMContentLoaded', () => {
   if (resetPasswordBtn) {
     resetPasswordBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      const codeInput = document.getElementById('verification-code');
-      const newPassInput = document.getElementById('new-password');
-      const confirmPassInput = document.getElementById('confirm-password');
-
-      if (codeInput && newPassInput && confirmPassInput) {
-        confirmNewPassword(
-          codeInput.value,
-          newPassInput.value,
-          confirmPassInput.value
-        );
-      }
+      handleResetSubmit();
     });
   }
+
+  // 5b. Reset Password Enter Key Support
+  const verificationCodeInput = document.getElementById('verification-code');
+  const newPasswordInput = document.getElementById('new-password');
+  const confirmPasswordInput = document.getElementById('confirm-password');
+
+  [verificationCodeInput, newPasswordInput, confirmPasswordInput].forEach(input => {
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleResetSubmit();
+        }
+      });
+    }
+  });
 
   // 6. Back to Login Links
   const backToLogin1 = document.getElementById('back-to-login-1');
