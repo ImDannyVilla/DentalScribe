@@ -2,7 +2,7 @@
    1. VARIABLES & RESET
    ========================================= */
 :root {
-  --primary-blue: #3b82f6; /* The Twofold Blue */
+  --primary-blue: #3b82f6;
   --primary-dark: #2563eb;
   --bg-page: #f8fafc;
   --bg-white: #ffffff;
@@ -10,6 +10,7 @@
   --text-muted: #64748b;
   --border-light: #e2e8f0;
   --danger: #ef4444;
+  --success: #22c55e;
   --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
@@ -24,6 +25,7 @@ body {
   background-color: var(--bg-page);
   color: var(--text-main);
   height: 100vh;
+  width: 100vw;
   overflow: hidden;
 }
 
@@ -35,19 +37,18 @@ body {
 .hidden { display: none !important; }
 
 /* =========================================
-   3. LOGIN SCREEN (Centered Fix)
+   3. LOGIN & AUTH SCREENS (CENTERED)
    ========================================= */
-#login-screen {
-  /* Force full screen height */
+#login-screen,
+#forgot-password-screen,
+#reset-password-screen {
   height: 100vh;
   width: 100vw;
   background-color: var(--bg-page);
-
-  /* Flexbox Centering Magic */
   display: flex !important;
   flex-direction: column;
-  justify-content: center; /* Vertical Center */
-  align-items: center;     /* Horizontal Center */
+  justify-content: center;
+  align-items: center;
 }
 
 .login-wrapper {
@@ -56,9 +57,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  /* Ensure no margins push it off-center */
-  margin: 0;
-  padding: 1rem; /* Prevent touching edges on mobile */
+  padding: 1rem;
 }
 
 .brand-logo {
@@ -94,8 +93,93 @@ body {
   font-size: 0.95rem;
 }
 
+.input-group { margin-bottom: 1.25rem; }
+.input-group label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; color: var(--text-main); }
+.input-group input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+.input-group input:focus { outline: none; border-color: var(--primary-blue); }
+
+.btn-primary-block {
+  width: 100%;
+  padding: 0.875rem;
+  background-color: var(--primary-blue);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-primary-block:hover { background-color: var(--primary-dark); }
+
+.error-text {
+  color: var(--danger);
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  min-height: 1.25rem;
+}
+
+.success-text {
+  color: var(--success);
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  min-height: 1.25rem;
+  font-weight: 500;
+}
+
+/* --- Forgot Password Link --- */
+.forgot-password-link {
+  text-align: center;
+  margin-top: 1.5rem;
+}
+
+.forgot-password-link a {
+  color: var(--primary-blue);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.forgot-password-link a:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+/* --- Back to Login Link --- */
+.back-to-login {
+  text-align: center;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.back-to-login a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.2s;
+}
+
+.back-to-login a:hover {
+  color: var(--primary-blue);
+}
+
 /* =========================================
-   4. DASHBOARD HEADER (Twofold Style)
+   4. DASHBOARD HEADER
    ========================================= */
 .app-header {
   background: var(--primary-blue);
@@ -128,7 +212,7 @@ body {
   overflow-y: auto;
 }
 
-/* --- THE SETUP CARD (Inputs & Circle Button) --- */
+/* --- SETUP CARD & INPUTS --- */
 .setup-card {
   background: white;
   padding: 2.5rem;
@@ -203,12 +287,12 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
-/* --- RESULTS PANELS --- */
+/* --- RESULTS GRID --- */
 .results-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
-  height: 500px; /* Fixed height for scroll areas */
+  height: 500px;
 }
 
 .panel {

@@ -17,6 +17,9 @@
   <body>
     <div id="app">
 
+      <!-- ============================================ -->
+      <!-- LOGIN SCREEN -->
+      <!-- ============================================ -->
       <div id="login-screen" class="screen active">
         <div class="login-wrapper">
           <div class="brand-logo">
@@ -38,10 +41,82 @@
 
             <button id="login-btn" class="btn-primary-block">Sign In</button>
             <p id="login-error" class="error-text"></p>
+
+            <div class="forgot-password-link">
+              <a href="#" id="forgot-password-link">Forgot Password?</a>
+            </div>
           </div>
         </div>
       </div>
 
+      <!-- ============================================ -->
+      <!-- FORGOT PASSWORD - REQUEST CODE SCREEN -->
+      <!-- ============================================ -->
+      <div id="forgot-password-screen" class="screen hidden">
+        <div class="login-wrapper">
+          <div class="brand-logo">
+            <i class="fa-solid fa-tooth"></i>
+            <span>Twofold Dental</span>
+          </div>
+          <div class="login-card">
+            <h2>Reset Password</h2>
+            <p class="login-subtext">Enter your email to receive a verification code</p>
+
+            <div class="input-group">
+              <label>Email Address</label>
+              <input type="email" id="forgot-email" placeholder="name@dentaloffice.com">
+            </div>
+
+            <button id="send-code-btn" class="btn-primary-block">Send Verification Code</button>
+            <p id="forgot-error" class="error-text"></p>
+
+            <div class="back-to-login">
+              <a href="#" id="back-to-login-1"><i class="fa-solid fa-arrow-left"></i> Back to Login</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- FORGOT PASSWORD - ENTER CODE & NEW PASSWORD -->
+      <!-- ============================================ -->
+      <div id="reset-password-screen" class="screen hidden">
+        <div class="login-wrapper">
+          <div class="brand-logo">
+            <i class="fa-solid fa-tooth"></i>
+            <span>Twofold Dental</span>
+          </div>
+          <div class="login-card">
+            <h2>Enter New Password</h2>
+            <p class="login-subtext">Check your email for the verification code</p>
+
+            <div class="input-group">
+              <label>Verification Code</label>
+              <input type="text" id="verification-code" placeholder="Enter 6-digit code">
+            </div>
+            <div class="input-group">
+              <label>New Password</label>
+              <input type="password" id="new-password" placeholder="••••••••">
+            </div>
+            <div class="input-group">
+              <label>Confirm New Password</label>
+              <input type="password" id="confirm-password" placeholder="••••••••">
+            </div>
+
+            <button id="reset-password-btn" class="btn-primary-block">Reset Password</button>
+            <p id="reset-error" class="error-text"></p>
+            <p id="reset-success" class="success-text"></p>
+
+            <div class="back-to-login">
+              <a href="#" id="back-to-login-2"><i class="fa-solid fa-arrow-left"></i> Back to Login</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- DASHBOARD SCREEN -->
+      <!-- ============================================ -->
       <div id="dashboard-screen" class="screen hidden">
 
         <header class="app-header">

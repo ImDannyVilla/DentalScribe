@@ -26,25 +26,35 @@ let idToken = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let selectedPatient = null;
+let resetEmail = null; // Store email for password reset flow
 
 // ============================================
 // UI Management
 // ============================================
 function showScreen(screenId) {
+  // Hide all screens first
   document.querySelectorAll('.screen').forEach(screen => {
     screen.classList.remove('active');
-    screen.classList.add('hidden'); // Ensure others are really hidden
+    screen.classList.add('hidden');
+    screen.style.display = 'none';
   });
 
+  // Show the requested screen
   const screen = document.getElementById(screenId);
   if(screen) {
     screen.classList.remove('hidden');
     screen.classList.add('active');
+
+    // Explicitly set display based on screen type
+    if (screenId === 'login-screen' || screenId === 'forgot-password-screen' || screenId === 'reset-password-screen') {
+        screen.style.display = 'flex';
+    } else {
+        screen.style.display = 'block'; // Dashboard uses block/flex internal
+    }
   }
 }
 
 function showLoading(show = true) {
-  // Optional: Add a simple spinner logic here if you add a spinner div later
   const status = document.getElementById('recording-status');
   if(status && show) status.textContent = 'Processing...';
 }
@@ -54,6 +64,12 @@ function showError(elementId, message) {
   if (!errorEl) return;
   errorEl.textContent = message;
   setTimeout(() => errorEl.textContent = '', 5000);
+}
+
+function showSuccess(elementId, message) {
+  const successEl = document.getElementById(elementId);
+  if (!successEl) return;
+  successEl.textContent = message;
 }
 
 // ============================================
@@ -74,6 +90,8 @@ function login(email, password) {
 
   cognitoUser.authenticateUser(authenticationDetails, {
     onSuccess: (result) => {
+      console.log("✅ Login Successful! Switching to Dashboard...");
+
       idToken = result.getIdToken().getJwtToken();
       currentUser = cognitoUser;
 
@@ -87,16 +105,29 @@ function login(email, password) {
         }
       });
 
-      // ✅ Switch to the Dashboard
-      showScreen('dashboard-screen');
+      // ✅ FORCE UI SWITCH
+      const loginScreen = document.getElementById('login-screen');
+      const dashboardScreen = document.getElementById('dashboard-screen');
+
+      if (loginScreen) {
+        loginScreen.classList.remove('active');
+        loginScreen.classList.add('hidden');
+        loginScreen.style.display = 'none';
+      }
+
+      if (dashboardScreen) {
+        dashboardScreen.classList.remove('hidden');
+        dashboardScreen.classList.add('active');
+        dashboardScreen.style.display = 'flex';
+      }
     },
 
     onFailure: (err) => {
+      console.error("Login Failed:", err);
       showError('login-error', err.message || 'Login failed');
     },
 
     newPasswordRequired: (userAttributes, requiredAttributes) => {
-      // Handle password change if needed (simplified for now)
       alert('Password change required. Please contact admin.');
     }
   });
@@ -115,6 +146,96 @@ function logout() {
   if(results) results.classList.add('hidden');
 
   showScreen('login-screen');
+}
+
+// ============================================
+// Forgot Password Functions
+// ============================================
+function initiateForgotPassword(email) {
+  if (!email || !email.trim()) {
+    showError('forgot-error', 'Please enter your email address');
+    return;
+  }
+
+  const userData = {
+    Username: email.trim(),
+    Pool: userPool
+  };
+
+  const cognitoUser = new CognitoUser(userData);
+
+  // Store email for the confirmation step
+  resetEmail = email.trim();
+
+  cognitoUser.forgotPassword({
+    onSuccess: (data) => {
+      console.log('✅ Verification code sent:', data);
+      // Move to the reset password screen
+      showScreen('reset-password-screen');
+    },
+    onFailure: (err) => {
+      console.error('❌ Forgot password error:', err);
+      showError('forgot-error', err.message || 'Failed to send verification code');
+    }
+  });
+}
+
+function confirmNewPassword(verificationCode, newPassword, confirmPassword) {
+  // Validation
+  if (!verificationCode || !verificationCode.trim()) {
+    showError('reset-error', 'Please enter the verification code');
+    return;
+  }
+
+  if (!newPassword || newPassword.length < 8) {
+    showError('reset-error', 'Password must be at least 8 characters');
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    showError('reset-error', 'Passwords do not match');
+    return;
+  }
+
+  if (!resetEmail) {
+    showError('reset-error', 'Session expired. Please start over.');
+    showScreen('forgot-password-screen');
+    return;
+  }
+
+  const userData = {
+    Username: resetEmail,
+    Pool: userPool
+  };
+
+  const cognitoUser = new CognitoUser(userData);
+
+  cognitoUser.confirmPassword(verificationCode.trim(), newPassword, {
+    onSuccess: () => {
+      console.log('✅ Password reset successful!');
+      showSuccess('reset-success', 'Password reset successful! Redirecting to login...');
+
+      // Clear the stored email
+      resetEmail = null;
+
+      // Clear input fields
+      document.getElementById('verification-code').value = '';
+      document.getElementById('new-password').value = '';
+      document.getElementById('confirm-password').value = '';
+
+      // Redirect to login after 2 seconds
+      setTimeout(() => {
+        showScreen('login-screen');
+        // Clear success message
+        const successEl = document.getElementById('reset-success');
+        if (successEl) successEl.textContent = '';
+      }, 2000);
+    },
+    onFailure: (err) => {
+      console.error('❌ Password reset failed:', err);
+      showError('reset-error', err.message || 'Failed to reset password');
+    }
+  });
 }
 
 // ============================================
@@ -246,14 +367,17 @@ async function startRecording() {
     // 1. Animate Button
     if(recordBtn) {
       recordBtn.classList.add('recording');
-      recordBtn.innerHTML = '<i class="fa-solid fa-stop"></i>'; // Change icon to Stop
+      recordBtn.innerHTML = '<i class="fa-solid fa-stop"></i>';
     }
 
     // 2. Update Status Text
     if(status) status.textContent = 'Recording in progress...';
 
     // 3. ✅ SHOW RESULTS PANEL IMMEDIATELY
-    if(resultsPanel) resultsPanel.classList.remove('hidden');
+    if(resultsPanel) {
+        resultsPanel.classList.remove('hidden');
+        resultsPanel.style.display = 'grid'; // Ensure grid layout is respected
+    }
 
   } catch (error) {
     console.error('Mic Error:', error);
@@ -270,7 +394,7 @@ function stopRecording() {
 
     if(recordBtn) {
       recordBtn.classList.remove('recording');
-      recordBtn.innerHTML = '<i class="fa-solid fa-microphone"></i>'; // Change back to Mic
+      recordBtn.innerHTML = '<i class="fa-solid fa-microphone"></i>';
     }
 
     if(status) status.textContent = 'Processing audio...';
@@ -334,7 +458,7 @@ async function generateVisitSummary(transcript) {
         transcript: transcript,
         patient_name: selectedPatient ? selectedPatient.name : 'Unknown',
         patient_id: selectedPatient ? selectedPatient.patient_id : null,
-        template: template // Send the selected template
+        template: template
       })
     });
 
@@ -359,22 +483,100 @@ async function generateVisitSummary(transcript) {
 // Initialization & Listeners
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
+  console.log("🚀 App Loaded. initializing listeners...");
 
-  // Login Button
+  // 1. Login Logic
   const loginBtn = document.getElementById('login-btn');
-  if(loginBtn) {
-    loginBtn.addEventListener('click', () => {
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value;
-      if (email && password) login(email, password);
+  if (loginBtn) {
+    loginBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const emailInput = document.getElementById('email');
+      const passInput = document.getElementById('password');
+
+      if (!emailInput || !passInput) return;
+
+      const email = emailInput.value.trim();
+      const password = passInput.value;
+
+      if (email && password) {
+        login(email, password);
+      } else {
+        alert('Please enter both email and password');
+      }
     });
   }
 
-  // Logout Button
+  // 2. Logout Logic
   const logoutBtn = document.getElementById('logout-btn');
   if(logoutBtn) logoutBtn.addEventListener('click', logout);
 
-  // Patient Search Input
+  // 3. Forgot Password Link
+  const forgotPasswordLink = document.getElementById('forgot-password-link');
+  if (forgotPasswordLink) {
+    forgotPasswordLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      // Pre-fill email if already entered
+      const emailInput = document.getElementById('email');
+      const forgotEmailInput = document.getElementById('forgot-email');
+      if (emailInput && forgotEmailInput && emailInput.value) {
+        forgotEmailInput.value = emailInput.value;
+      }
+      showScreen('forgot-password-screen');
+    });
+  }
+
+  // 4. Send Verification Code Button
+  const sendCodeBtn = document.getElementById('send-code-btn');
+  if (sendCodeBtn) {
+    sendCodeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const forgotEmailInput = document.getElementById('forgot-email');
+      if (forgotEmailInput) {
+        initiateForgotPassword(forgotEmailInput.value);
+      }
+    });
+  }
+
+  // 5. Reset Password Button
+  const resetPasswordBtn = document.getElementById('reset-password-btn');
+  if (resetPasswordBtn) {
+    resetPasswordBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const codeInput = document.getElementById('verification-code');
+      const newPassInput = document.getElementById('new-password');
+      const confirmPassInput = document.getElementById('confirm-password');
+
+      if (codeInput && newPassInput && confirmPassInput) {
+        confirmNewPassword(
+          codeInput.value,
+          newPassInput.value,
+          confirmPassInput.value
+        );
+      }
+    });
+  }
+
+  // 6. Back to Login Links
+  const backToLogin1 = document.getElementById('back-to-login-1');
+  const backToLogin2 = document.getElementById('back-to-login-2');
+
+  if (backToLogin1) {
+    backToLogin1.addEventListener('click', (e) => {
+      e.preventDefault();
+      resetEmail = null;
+      showScreen('login-screen');
+    });
+  }
+
+  if (backToLogin2) {
+    backToLogin2.addEventListener('click', (e) => {
+      e.preventDefault();
+      resetEmail = null;
+      showScreen('login-screen');
+    });
+  }
+
+  // 7. Patient Search Logic
   const patientSearch = document.getElementById('patient-search');
   let searchTimeout;
   if(patientSearch) {
@@ -382,6 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => showPatientResults(e.target.value), 300);
     });
+
     // Close results when clicking outside
     document.addEventListener('click', (e) => {
       const results = document.getElementById('patient-results');
@@ -391,7 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Record Button (The Big Circle)
+  // 8. Record Button Logic
   const recordBtn = document.getElementById('record-btn');
   if(recordBtn) {
     recordBtn.addEventListener('click', () => {
@@ -403,7 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Copy Button
+  // 9. Copy Button Logic
   const copyBtn = document.getElementById('copy-btn');
   if(copyBtn) {
     copyBtn.addEventListener('click', () => {
