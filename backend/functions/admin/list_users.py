@@ -31,9 +31,10 @@ def lambda_handler(event, context):
     try:
         # Verify admin role
         claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
-        user_role = claims.get('custom:role', 'user')
+        groups = claims.get('cognito:groups', [])
+        is_admin = 'Admin' in groups if isinstance(groups, list) else False
 
-        if user_role != 'admin':
+        if not is_admin:
             return {
                 'statusCode': 403,
                 'headers': get_cors_headers(),

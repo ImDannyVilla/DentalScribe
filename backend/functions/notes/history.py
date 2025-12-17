@@ -30,7 +30,8 @@ def lambda_handler(event, context):
         # Get user from Cognito
         claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
         user_id = claims.get('sub')
-        user_role = claims.get('custom:role', 'user')
+        groups = claims.get('cognito:groups', [])
+        user_role = 'admin' if ('Admin' in groups if isinstance(groups, list) else False) else 'user'
         
         if not user_id:
             return {

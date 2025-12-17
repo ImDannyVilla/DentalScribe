@@ -237,6 +237,7 @@
               </div>
             </div>
           </div>
+          <!-- END VIEW: SCRIBE -->
 
           <!-- VIEW: VISITS HISTORY -->
           <div id="view-visits" class="view hidden">
@@ -283,44 +284,8 @@
                 </div>
               </div>
             </div>
-
-            <!-- Mic Test Modal -->
-            <div id="mic-test-modal" class="modal hidden">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h2>Microphone Settings</h2>
-                  <button class="modal-close" id="close-mic-modal">&times;</button>
-                </div>
-                <div class="modal-body">
-                  <div class="input-group">
-                    <label>Select Microphone</label>
-                    <select id="mic-select" class="select-modern">
-                      <option value="">Loading microphones...</option>
-                    </select>
-                  </div>
-
-                  <div class="mic-test-section">
-                    <label>Microphone Level</label>
-                    <div class="mic-level-container">
-                      <div class="mic-level-bar">
-                        <div id="mic-level-fill" class="mic-level-fill"></div>
-                      </div>
-                      <span id="mic-level-value" class="mic-level-value">0%</span>
-                    </div>
-                    <p class="mic-test-hint">Speak to test your microphone</p>
-                  </div>
-
-                  <div class="mic-status" id="mic-status">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span>Microphone ready</span>
-                  </div>
-                </div>
-                <div class="modal-footer">
-                  <button id="mic-test-done-btn" class="btn-primary">Done</button>
-                </div>
-              </div>
-            </div>
           </div>
+          <!-- END VIEW: VISITS -->
 
           <!-- VIEW: TEMPLATES (Admin Only) -->
           <div id="view-templates" class="view hidden">
@@ -380,6 +345,7 @@ PLAN:
               </div>
             </div>
           </div>
+          <!-- END VIEW: TEMPLATES -->
 
           <!-- VIEW: INVITE TEAM (Admin Only) -->
           <div id="view-invite" class="view hidden">
@@ -415,9 +381,9 @@ PLAN:
                 </div>
               </div>
 
-              <!-- Pending Invites -->
+              <!-- Team Members List -->
               <div class="invite-card">
-                <h3><i class="fa-solid fa-clock"></i> Team Members</h3>
+                <h3><i class="fa-solid fa-users"></i> Team Members</h3>
                 <div id="team-members-list" class="team-list">
                   <div class="loading-spinner">
                     <i class="fa-solid fa-spinner fa-spin"></i>
@@ -427,6 +393,7 @@ PLAN:
               </div>
             </div>
           </div>
+          <!-- END VIEW: INVITE -->
 
           <!-- VIEW: SETTINGS -->
           <div id="view-settings" class="view hidden">
@@ -490,10 +457,72 @@ PLAN:
               </div>
             </div>
           </div>
+          <!-- END VIEW: SETTINGS -->
 
         </div>
+        <!-- END .main-content -->
+
+        <!-- ============================================ -->
+        <!-- GLOBAL MODALS (accessible from any view) -->
+        <!-- ============================================ -->
+
+        <!-- Mic Test Modal -->
+        <div id="mic-test-modal" class="modal hidden">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h2>Microphone Settings</h2>
+              <button class="modal-close" id="close-mic-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="input-group">
+                <label>Select Microphone</label>
+                <select id="mic-select" class="select-modern">
+                  <option value="">Loading microphones...</option>
+                </select>
+              </div>
+              <div class="mic-test-section">
+                <label>Microphone Level</label>
+                <div class="mic-level-container">
+                  <div class="mic-level-bar">
+                    <div id="mic-level-fill" class="mic-level-fill"></div>
+                  </div>
+                  <span id="mic-level-value" class="mic-level-value">0%</span>
+                </div>
+                <p class="mic-test-hint">Speak to test your microphone</p>
+              </div>
+              <div class="mic-status" id="mic-status">
+                <i class="fa-solid fa-circle-check"></i>
+                <span>Microphone ready</span>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button id="mic-test-done-btn" class="btn-primary">Done</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Mic Check Popup (shows on login) -->
+        <div id="mic-check-popup" class="mic-check-popup hidden">
+          <div class="mic-check-content">
+            <div class="mic-check-icon">
+              <i class="fa-solid fa-microphone"></i>
+            </div>
+            <div class="mic-check-info">
+              <span class="mic-check-title">Microphone Ready</span>
+              <span class="mic-check-device" id="mic-check-device">Default Microphone</span>
+            </div>
+            <div class="mic-check-level">
+              <div id="mic-check-bar" class="mic-check-bar"></div>
+            </div>
+            <button id="mic-check-close" class="mic-check-close">&times;</button>
+          </div>
+        </div>
+
       </div>
+      <!-- END #dashboard-screen -->
+
     </div>
+    <!-- END #app -->
 
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -7,16 +7,16 @@ import {
 
 // Import CSS
 import './style.css';
-
 // --- CONFIGURATION ---
 const poolData = {
-    UserPoolId: 'us-east-1_lSFojctzR',
-    ClientId: '5softmo34b8gmpgg688lhs8kjl'
+    UserPoolId: 'us-east-1_1DeJbAffy',       // <-- UPDATED
+    ClientId: '3eopf99clp8o9mk2ihntg2r9cg'   // <-- UPDATED
 };
 
 // API CONFIGURATION
-const MAIN_API = 'https://qol8fm6q72.execute-api.us-east-1.amazonaws.com/prod';
-const PATIENTS_API = 'https://fdnssz2lea.execute-api.us-east-1.amazonaws.com/prod';
+// Note: Since we merged the stacks, MAIN_API and PATIENTS_API are now the SAME URL.
+const MAIN_API = 'https://fzlklmttle.execute-api.us-east-1.amazonaws.com/prod';
+const PATIENTS_API = 'https://fzlklmttle.execute-api.us-east-1.amazonaws.com/prod';
 
 const userPool = new CognitoUserPool(poolData);
 
@@ -36,6 +36,11 @@ let selectedMicId = null;
 let micTestStream = null;
 let micAnalyser = null;
 let micAnimationFrame = null;
+
+// Quick mic check variables
+let quickMicStream = null;
+let quickMicAnalyser = null;
+let quickMicAnimation = null;
 
 // ============================================
 // UI Management
@@ -154,6 +159,9 @@ function login(email, password) {
       // Switch to dashboard
       showScreen('dashboard-screen');
       showView('scribe');
+
+      // Show quick mic check popup after short delay
+      setTimeout(() => showQuickMicCheck(), 500);
     },
 
     onFailure: (err) => {
@@ -855,7 +863,7 @@ async function loadTeamMembers() {
 }
 
 // ============================================
-// Mic Test Functions
+// Mic Test Modal Functions
 // ============================================
 async function openMicTestModal() {
   const modal = document.getElementById('mic-test-modal');
@@ -994,10 +1002,86 @@ function updateMicStatus(isGood, message) {
 }
 
 // ============================================
+// Quick Mic Check on Login
+// ============================================
+async function showQuickMicCheck() {
+  const popup = document.getElementById('mic-check-popup');
+  const deviceLabel = document.getElementById('mic-check-device');
+  const bar = document.getElementById('mic-check-bar');
+
+  if (!popup) return;
+
+  try {
+    // Get mic access
+    quickMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    // Get device name
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices.filter(d => d.kind === 'audioinput');
+    const activeTrack = quickMicStream.getAudioTracks()[0];
+    const activeDevice = audioInputs.find(d => d.deviceId === activeTrack.getSettings().deviceId);
+
+    // Store the selected mic for later use
+    if (activeTrack.getSettings().deviceId) {
+      selectedMicId = activeTrack.getSettings().deviceId;
+    }
+
+    if (deviceLabel) {
+      deviceLabel.textContent = activeDevice?.label || 'Default Microphone';
+    }
+
+    // Set up audio analysis
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(quickMicStream);
+    quickMicAnalyser = audioContext.createAnalyser();
+    quickMicAnalyser.fftSize = 256;
+    source.connect(quickMicAnalyser);
+
+    // Show popup
+    popup.classList.remove('hidden');
+
+    // Animate level bar
+    const dataArray = new Uint8Array(quickMicAnalyser.frequencyBinCount);
+    function updateLevel() {
+      if (!quickMicAnalyser) return;
+      quickMicAnalyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      const pct = Math.min(100, Math.round((avg / 128) * 100));
+      if (bar) bar.style.width = `${pct}%`;
+      quickMicAnimation = requestAnimationFrame(updateLevel);
+    }
+    updateLevel();
+
+    // Auto-close after 5 seconds
+    setTimeout(() => closeQuickMicCheck(), 5000);
+
+  } catch (error) {
+    console.log('Mic check skipped:', error.message);
+  }
+}
+
+function closeQuickMicCheck() {
+  const popup = document.getElementById('mic-check-popup');
+  if (popup) popup.classList.add('hidden');
+
+  if (quickMicAnimation) {
+    cancelAnimationFrame(quickMicAnimation);
+    quickMicAnimation = null;
+  }
+
+  if (quickMicStream) {
+    quickMicStream.getTracks().forEach(track => track.stop());
+    quickMicStream = null;
+  }
+
+  quickMicAnalyser = null;
+}
+
+// ============================================
 // Patient Management Functions
 // ============================================
 async function searchPatients(query) {
-  if (!query || query.length < 2) return [];
+  if (!query || query.length < 1) return [];
 
   try {
     const response = await fetch(
@@ -1018,7 +1102,7 @@ async function showPatientResults(query) {
   const resultsDiv = document.getElementById('patient-results');
   if (!resultsDiv) return;
 
-  if (!query || query.length < 2) {
+  if (!query || query.length < 1) {
     resultsDiv.style.display = 'none';
     return;
   }
@@ -1027,17 +1111,20 @@ async function showPatientResults(query) {
   resultsDiv.innerHTML = '';
   resultsDiv.style.display = 'block';
 
-  patients.forEach(patient => {
-    const item = document.createElement('div');
-    item.className = 'patient-result-item';
-    item.innerHTML = `<strong>${patient.name}</strong> <span style="color:#64748b; font-size:0.8em">#${patient.patient_id.substring(0,4)}</span>`;
-    item.onclick = () => selectPatient(patient);
-    resultsDiv.appendChild(item);
-  });
+  if (patients.length > 0) {
+    patients.forEach(patient => {
+      const item = document.createElement('div');
+      item.className = 'patient-result-item';
+      item.innerHTML = `<strong>${patient.name}</strong> <span style="color:#64748b; font-size:0.8em">${patient.patient_id ? '#' + patient.patient_id.substring(4,8) : ''}</span>`;
+      item.onclick = () => selectPatient(patient);
+      resultsDiv.appendChild(item);
+    });
+  }
 
+  // Always show "Create new" option
   const addNew = document.createElement('div');
   addNew.className = 'patient-result-item add-new';
-  addNew.innerHTML = `<i class="fa-solid fa-plus"></i> Create: "${query}"`;
+  addNew.innerHTML = `<i class="fa-solid fa-plus"></i> Create new: "${query}"`;
   addNew.onclick = () => createNewPatient(query);
   resultsDiv.appendChild(addNew);
 }
@@ -1477,7 +1564,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ============================================
-  // Mic Test
+  // Mic Test Modal
   // ============================================
   const testMicBtn = document.getElementById('test-mic-btn');
   if(testMicBtn) {
@@ -1499,5 +1586,13 @@ document.addEventListener('DOMContentLoaded', () => {
     micSelect.addEventListener('change', (e) => {
       startMicTest(e.target.value);
     });
+  }
+
+  // ============================================
+  // Quick Mic Check Popup
+  // ============================================
+  const micCheckClose = document.getElementById('mic-check-close');
+  if(micCheckClose) {
+    micCheckClose.addEventListener('click', closeQuickMicCheck);
   }
 });

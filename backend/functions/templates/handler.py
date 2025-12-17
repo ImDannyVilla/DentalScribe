@@ -117,7 +117,8 @@ def lambda_handler(event, context):
         # Get user info from Cognito claims
         claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
         user_id = claims.get('sub', 'anonymous')
-        user_role = claims.get('custom:role', 'user')
+        groups = claims.get('cognito:groups', [])
+        user_role = 'admin' if ('Admin' in groups if isinstance(groups, list) else False) else 'user'
         
         if http_method == 'GET':
             if template_id:

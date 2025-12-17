@@ -488,6 +488,136 @@ body {
   order: 3;
 }
 
+#view-scribe {
+  align-items: center;
+}
+
+#view-scribe .view-header {
+  width: 100%;
+  max-width: 700px;
+}
+
+#view-scribe .setup-card {
+  width: 100%;
+}
+
+#view-scribe .results-grid {
+  width: 100%;
+  max-width: 1200px;
+}
+
+/* Center scribe view */
+#view-scribe {
+  align-items: center;
+}
+
+#view-scribe .view-header {
+  width: 100%;
+  max-width: 700px;
+}
+
+#view-scribe .setup-card {
+  width: 100%;
+}
+
+#view-scribe .results-grid {
+  width: 100%;
+  max-width: 1200px;
+}
+
+/* Quick Mic Check Popup */
+.mic-check-popup {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  animation: slideUp 0.3s ease-out;
+}
+
+.mic-check-popup.hidden {
+  display: none;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mic-check-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid var(--border-light);
+  min-width: 280px;
+}
+
+.mic-check-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-dark) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.1rem;
+}
+
+.mic-check-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.mic-check-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.mic-check-device {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mic-check-level {
+  width: 60px;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mic-check-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #22c55e, #84cc16);
+  border-radius: 3px;
+  transition: width 0.05s ease-out;
+}
+
+.mic-check-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.mic-check-close:hover {
+  color: var(--text-main);
+}
 /* =========================================
    6. SCRIBE VIEW (Recording)
    ========================================= */
