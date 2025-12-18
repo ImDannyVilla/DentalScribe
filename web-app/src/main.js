@@ -7,16 +7,15 @@ import {
 
 // Import CSS
 import './style.css';
-// --- CONFIGURATION ---
+import { config } from './config.js';
+
 const poolData = {
-    UserPoolId: 'us-east-1_1DeJbAffy',       // <-- UPDATED
-    ClientId: '3eopf99clp8o9mk2ihntg2r9cg'   // <-- UPDATED
+  UserPoolId: config.userPoolId,
+  ClientId: config.clientId
 };
 
-// API CONFIGURATION
-// Note: Since we merged the stacks, MAIN_API and PATIENTS_API are now the SAME URL.
-const MAIN_API = 'https://fzlklmttle.execute-api.us-east-1.amazonaws.com/prod';
-const PATIENTS_API = 'https://fzlklmttle.execute-api.us-east-1.amazonaws.com/prod';
+const MAIN_API = config.apiEndpoint;
+const PATIENTS_API = config.apiEndpoint;
 
 const userPool = new CognitoUserPool(poolData);
 
@@ -119,6 +118,8 @@ function showSuccess(elementId, message) {
 // Authentication Functions
 // ============================================
 function login(email, password) {
+  console.log("🔐 Attempting Login for:", email); // DEBUG
+
   const authenticationDetails = new AuthenticationDetails({
     Username: email,
     Password: password
@@ -136,11 +137,19 @@ function login(email, password) {
       console.log("✅ Login Successful!");
 
       idToken = result.getIdToken().getJwtToken();
+
+      // --- DEBUGGING TOKEN ---
+      window.idToken = idToken;
+      console.log("🔑 Token Received (First 20 chars):", idToken.substring(0, 20) + "...");
+      console.log("🔑 Token Type:", typeof idToken);
+      // ----------------------
+
       currentUser = cognitoUser;
 
       // Decode JWT to get role
       const payload = JSON.parse(atob(idToken.split('.')[1]));
-      userRole = payload['custom:role'] || 'user';
+      const groups = payload['cognito:groups'] || [];
+      userRole = Array.isArray(groups) && groups.includes('Admin') ? 'admin' : 'user';
       userEmail = payload.email || email;
 
       console.log("User role:", userRole);
@@ -176,6 +185,7 @@ function login(email, password) {
 }
 
 function logout() {
+  console.log("👋 Logging out..."); // DEBUG
   if (currentUser) {
     currentUser.signOut();
   }
@@ -337,6 +347,11 @@ function changePassword(currentPassword, newPassword, confirmPassword) {
 // Templates Functions
 // ============================================
 async function loadTemplates() {
+  // --- DEBUG ---
+  console.log("📡 Fetching Templates...");
+  console.log("   Token Status:", idToken ? "Exists" : "MISSING");
+  // --- DEBUG ---
+
   const list = document.getElementById('templates-list');
   if(!list) return;
 
@@ -349,7 +364,7 @@ async function loadTemplates() {
 
   try {
     const response = await fetch(`${MAIN_API}/templates`, {
-      headers: { 'Authorization': `Bearer ${idToken}` }
+      headers: { 'Authorization': idToken }
     });
 
     if (!response.ok) throw new Error('Failed to load templates');
@@ -460,7 +475,7 @@ async function loadTemplateDropdown() {
 
   try {
     const response = await fetch(`${MAIN_API}/templates`, {
-      headers: { 'Authorization': `Bearer ${idToken}` }
+      headers: { 'Authorization': idToken }
     });
 
     if (!response.ok) throw new Error('Failed to load templates');
@@ -544,7 +559,7 @@ async function saveTemplate() {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': idToken
       },
       body: JSON.stringify({ name, description, example_output })
     });
@@ -567,7 +582,7 @@ async function deleteTemplate(templateId) {
   try {
     const response = await fetch(`${MAIN_API}/templates/${templateId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${idToken}` }
+      headers: { 'Authorization': idToken}
     });
 
     if(!response.ok) throw new Error('Failed to delete template');
@@ -589,6 +604,8 @@ window.deleteTemplate = deleteTemplate;
 // Visits Functions
 // ============================================
 async function loadVisits() {
+  console.log("📡 loadVisits called. Token exists?", !!idToken); // DEBUG
+
   const list = document.getElementById('visits-list');
   if(!list) return;
 
@@ -606,7 +623,7 @@ async function loadVisits() {
       : `${MAIN_API}/notes`;
 
     const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${idToken}` }
+      headers: { 'Authorization': idToken }
     });
 
     if (!response.ok) throw new Error('Failed to load visits');
@@ -769,7 +786,7 @@ async function sendInvite() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': idToken
       },
       body: JSON.stringify({ email, name, role })
     });
@@ -809,7 +826,7 @@ async function loadTeamMembers() {
 
   try {
     const response = await fetch(`${MAIN_API}/admin/users`, {
-      headers: { 'Authorization': `Bearer ${idToken}` }
+      headers: { 'Authorization':idToken }
     });
 
     if (!response.ok) throw new Error('Failed to load team');
@@ -1083,10 +1100,12 @@ function closeQuickMicCheck() {
 async function searchPatients(query) {
   if (!query || query.length < 1) return [];
 
+  console.log("🔍 Searching patients:", query); // DEBUG
+
   try {
     const response = await fetch(
       `${PATIENTS_API}/patients/search?q=${encodeURIComponent(query)}`,
-      { headers: { 'Authorization': `Bearer ${idToken}` } }
+      { headers: { 'Authorization': idToken } }
     );
 
     if (!response.ok) throw new Error('Search failed');
@@ -1130,20 +1149,35 @@ async function showPatientResults(query) {
 }
 
 async function createNewPatient(name) {
+  // --- TRUTH SERUM DEBUG START ---
+  console.log("⚠️ ATTEMPTING API CALL: createNewPatient ⚠️");
+  console.log("1. Endpoint:", `${PATIENTS_API}/patients`);
+  console.log("2. Token value:", idToken);
+  console.log("3. Token Type:", typeof idToken);
+
+  const headersToSend = {
+    'Content-Type': 'application/json',
+    'Authorization': idToken
+  };
+  console.log("4. HEADERS BEING SENT:", headersToSend);
+  // --- TRUTH SERUM DEBUG END ---
+
   try {
     const response = await fetch(`${PATIENTS_API}/patients`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
-      },
+      headers: headersToSend, // Using the debugged headers variable
       body: JSON.stringify({ name: name.trim() })
     });
 
-    if (!response.ok) throw new Error('Failed to create patient');
+    if (!response.ok) {
+        console.error("❌ API ERROR RESPONSE:", response.status, response.statusText);
+        throw new Error('Failed to create patient');
+    }
+
     const data = await response.json();
     selectPatient(data.patient);
   } catch (error) {
+    console.error("❌ CATCH BLOCK ERROR:", error);
     alert('Error creating patient: ' + error.message);
   }
 }
@@ -1169,8 +1203,15 @@ async function startRecording() {
     return;
   }
 
+  // --- FIX: Clear previous results when starting new recording ---
+  const transcriptEl = document.getElementById('transcript');
+  const soapEl = document.getElementById('soap-note');
+  if(transcriptEl) transcriptEl.value = '';
+  if(soapEl) soapEl.innerHTML = '';
+  // -------------------------------------------------------------
+
   try {
-    const constraints = {
+     const constraints = {
       audio: {
         deviceId: selectedMicId ? { exact: selectedMicId } : undefined,
         channelCount: 1,
@@ -1253,7 +1294,7 @@ async function transcribeAudio(audioBlob) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': idToken
       },
       body: JSON.stringify({ audio: base64Audio })
     });
@@ -1262,6 +1303,24 @@ async function transcribeAudio(audioBlob) {
 
     const data = await response.json();
     const transcript = data.transcript;
+
+    // --- FIX: Check for empty transcript ---
+    if (!transcript || transcript.trim().length === 0) {
+      console.warn("Empty transcript received");
+
+      const status = document.getElementById('recording-status');
+      if(status) {
+        status.textContent = 'No Transcript Detected';
+        status.style.color = '#ef4444'; // Red text
+        // Reset color after 3 seconds
+        setTimeout(() => {
+            status.textContent = 'Ready to record';
+            status.style.color = '';
+        }, 3000);
+      }
+      return; // STOP HERE! Do not generate note.
+    }
+    // ---------------------------------------
 
     const transcriptEl = document.getElementById('transcript');
     if(transcriptEl) transcriptEl.value = transcript;
@@ -1287,7 +1346,7 @@ async function generateVisitSummary(transcript) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': idToken
       },
       body: JSON.stringify({
         transcript: transcript,
@@ -1317,6 +1376,14 @@ async function generateVisitSummary(transcript) {
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
   console.log("🚀 Scribe32 App Loaded");
+  // --- FIX: Clear stale data on page load ---
+  const transcriptEl = document.getElementById('transcript');
+  const soapEl = document.getElementById('soap-note');
+  const statusEl = document.getElementById('recording-status');
+
+  if(transcriptEl) transcriptEl.value = '';
+  if(soapEl) soapEl.innerHTML = '';
+  if(statusEl) statusEl.textContent = 'Ready to record';
 
   // ============================================
   // Login Handlers

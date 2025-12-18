@@ -3,7 +3,8 @@
 samconfig.toml
 *.yaml.bkp
 *.template
-
+# Sensitive config
+src/config.js
 # --- Python / Backend ---
 __pycache__/
 *.py[cod]
