@@ -1704,6 +1704,46 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ============================================
+  // Upload Audio handler
+  // ============================================
+  const uploadInput = document.getElementById('upload-audio');
+  if (uploadInput) {
+    uploadInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      if (!selectedPatient) {
+        alert('Please select or create a patient first');
+        uploadInput.value = '';
+        return;
+      }
+
+      try {
+        const status = document.getElementById('recording-status');
+        if (status) status.textContent = 'Uploading audio...';
+
+        const arrayBuffer = await file.arrayBuffer();
+        const blob = new Blob([arrayBuffer], { type: file.type || 'audio/webm' });
+
+        // Reveal results panel like after recording
+        const resultsPanel = document.getElementById('results-panel');
+        const setupPanel = document.getElementById('setup-panel');
+        const resultsToolbar = document.getElementById('results-toolbar');
+        if (resultsPanel) { resultsPanel.classList.remove('hidden'); resultsPanel.classList.add('takeover'); }
+        if (setupPanel) setupPanel.classList.add('hidden');
+        if (resultsToolbar) { resultsToolbar.classList.remove('hidden'); resultsToolbar.classList.add('visible'); }
+
+        await transcribeAudio(blob);
+      } catch (err) {
+        console.error('Upload error', err);
+        alert('Failed to process uploaded audio');
+      } finally {
+        uploadInput.value = '';
+      }
+    });
+  }
+
+  // ============================================
   // Quick Mic Check Popup
   // ============================================
   const micCheckClose = document.getElementById('mic-check-close');

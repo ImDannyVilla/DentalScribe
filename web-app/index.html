@@ -206,19 +206,19 @@
                   </select>
                 </div>
 
-                <div class="select-wrapper">
-                  <label>Modality</label>
-                  <select id="modality-select" class="select-modern">
-                    <option value="in_person">In Person</option>
-                    <option value="telehealth">Telehealth</option>
-                  </select>
-                </div>
               </div>
 
               <div class="action-center">
                 <button id="test-mic-btn" class="btn-secondary btn-mic-test">
                   <i class="fa-solid fa-sliders"></i> Test Microphone
                 </button>
+
+                <!-- Upload Audio (under Test Mic) -->
+                <input type="file" id="upload-audio" accept="audio/*" style="display:none;" />
+                <label for="upload-audio" id="upload-audio-label" class="btn-secondary">
+                  <i class="fa-solid fa-upload"></i> Upload Audio
+                </label>
+
                 <button id="record-btn" class="record-btn-circle">
                   <i class="fa-solid fa-microphone"></i>
                 </button>
