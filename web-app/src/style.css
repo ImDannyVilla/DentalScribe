@@ -1615,3 +1615,51 @@ input:disabled + .toggle-slider {
 .mic-status i {
   font-size: 1.25rem;
 }
+
+/* =========================================
+   GLOBAL LOADER (3 Dots)
+   ========================================= */
+.global-loader {
+  position: fixed;
+  inset: 0;
+  background: rgba(248, 250, 252, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.global-loader .loader-content {
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-lg);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.global-loader .loader-text {
+  color: var(--text-main);
+  font-weight: 600;
+}
+.global-loader .dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.global-loader .dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary-blue);
+  display: inline-block;
+  animation: dotBounce 1s infinite ease-in-out;
+}
+.global-loader .dots span:nth-child(2) { animation-delay: 0.15s; }
+.global-loader .dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dotBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.6; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}

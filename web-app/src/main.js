@@ -1302,8 +1302,34 @@ function stopRecording() {
 // ============================================
 // AI Processing
 // ============================================
+
+// Global loader helpers for seamless UX during transcription and note generation
+function showLoader(text = 'Processing...') {
+  const overlay = document.getElementById('global-loader');
+  const textEl = document.getElementById('loader-text');
+  if (textEl && typeof text === 'string') textEl.textContent = text;
+  if (overlay) overlay.classList.remove('hidden');
+  // Disable key interactive controls to prevent duplicate actions
+  const recordBtn = document.getElementById('record-btn');
+  if (recordBtn) recordBtn.disabled = true;
+  const uploadLabel = document.getElementById('upload-audio-label');
+  if (uploadLabel) { uploadLabel.style.pointerEvents = 'none'; uploadLabel.style.opacity = '0.6'; }
+}
+function setLoaderText(text) {
+  const textEl = document.getElementById('loader-text');
+  if (textEl && typeof text === 'string') textEl.textContent = text;
+}
+function hideLoader() {
+  const overlay = document.getElementById('global-loader');
+  if (overlay) overlay.classList.add('hidden');
+  const recordBtn = document.getElementById('record-btn');
+  if (recordBtn) recordBtn.disabled = false;
+  const uploadLabel = document.getElementById('upload-audio-label');
+  if (uploadLabel) { uploadLabel.style.pointerEvents = ''; uploadLabel.style.opacity = ''; }
+}
 async function transcribeAudio(audioBlob) {
   try {
+    showLoader('Transcribing audio...');
     const reader = new FileReader();
     reader.readAsDataURL(audioBlob);
     await new Promise(resolve => reader.onloadend = resolve);
@@ -1337,6 +1363,7 @@ async function transcribeAudio(audioBlob) {
             status.style.color = '';
         }, 3000);
       }
+      hideLoader();
       return; // STOP HERE! Do not generate note.
     }
     // ---------------------------------------
@@ -1346,6 +1373,7 @@ async function transcribeAudio(audioBlob) {
 
     const status = document.getElementById('recording-status');
     if(status) status.textContent = 'Generating Clinical Note...';
+    setLoaderText('Generating clinical note...');
 
     await generateVisitSummary(transcript);
 
@@ -1353,6 +1381,8 @@ async function transcribeAudio(audioBlob) {
     alert('Error: ' + error.message);
     const status = document.getElementById('recording-status');
     if(status) status.textContent = 'Error processing audio';
+  } finally {
+    hideLoader();
   }
 }
 
