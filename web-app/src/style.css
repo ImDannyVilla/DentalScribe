@@ -1223,10 +1223,10 @@ input:disabled + .toggle-slider {
 
 /* Mobile styles */
 @media (max-width: 767px) {
-  body { overflow: hidden; }
+  body { overflow: auto; }
   .sidebar { display: none; }
-  .main-content { padding: 0; height: 100vh; padding-bottom: 64px; }
-  .view { padding: 0; overflow: hidden; }
+  .main-content { padding: 0; min-height: 100vh; padding-bottom: 64px; overflow-y: auto; }
+  .view { padding: 0; overflow: auto; }
   .view-header { padding: 12px 16px; }
   .setup-card { padding: 16px; box-shadow: none; border-radius: 0; }
 
