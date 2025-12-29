@@ -173,6 +173,15 @@
           </div>
         </aside>
 
+        <!-- MOBILE BOTTOM NAV -->
+        <nav class="bottom-nav">
+          <a href="#" class="nav-item active" data-view="scribe"><i class="fa-solid fa-microphone"></i><span>Scribe</span></a>
+          <a href="#" class="nav-item" data-view="visits"><i class="fa-solid fa-clock-rotate-left"></i><span>Visits</span></a>
+          <a href="#" class="nav-item admin-only" data-view="templates" style="display:none;"><i class="fa-solid fa-file-lines"></i><span>Templates</span></a>
+          <a href="#" class="nav-item" data-view="settings"><i class="fa-solid fa-gear"></i><span>Settings</span></a>
+          <a href="#" class="nav-item" id="logout-btn-mobile"><i class="fa-solid fa-user"></i><span>Profile</span></a>
+        </nav>
+
         <!-- MAIN CONTENT AREA -->
         <div class="main-content">
 
@@ -218,6 +227,10 @@
               </div>
             </div>
 
+            <div id="results-toolbar" class="results-toolbar hidden">
+              <button id="back-to-setup" class="btn-secondary btn-back"><i class="fa-solid fa-arrow-left"></i> Back</button>
+              <button id="copy-btn-mobile" class="btn-primary btn-copy-large"><i class="fa-regular fa-copy"></i> Copy</button>
+            </div>
             <div id="results-panel" class="results-grid hidden">
               <div class="panel">
                 <div class="panel-header">
@@ -231,9 +244,7 @@
                   <h4><i class="fa-solid fa-wand-magic-sparkles"></i> Generated Note</h4>
                   <button id="copy-btn" class="btn-small">Copy</button>
                 </div>
-                <div id="soap-note" class="scroll-box note-content">
-                  <p class="placeholder-text">Note will generate here...</p>
-                </div>
+                <textarea id="soap-note" class="scroll-box note-editor" placeholder="Note will generate here..."></textarea>
               </div>
             </div>
           </div>

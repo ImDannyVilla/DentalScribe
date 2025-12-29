@@ -506,26 +506,9 @@ body {
   max-width: 1200px;
 }
 
-/* Center scribe view */
-#view-scribe {
-  align-items: center;
-}
-
-#view-scribe .view-header {
-  width: 100%;
-  max-width: 700px;
-}
-
-#view-scribe .setup-card {
-  width: 100%;
-}
-
-#view-scribe .results-grid {
-  width: 100%;
-  max-width: 1200px;
-}
-
-/* Quick Mic Check Popup */
+/* =========================================
+   QUICK MIC CHECK POPUP
+   ========================================= */
 .mic-check-popup {
   position: fixed;
   bottom: 24px;
@@ -539,8 +522,14 @@ body {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .mic-check-content {
@@ -565,6 +554,7 @@ body {
   justify-content: center;
   color: white;
   font-size: 1.1rem;
+  flex-shrink: 0;
 }
 
 .mic-check-info {
@@ -583,10 +573,10 @@ body {
 .mic-check-device {
   font-size: 0.8rem;
   color: var(--text-muted);
-  max-width: 150px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 150px;
 }
 
 .mic-check-level {
@@ -613,6 +603,7 @@ body {
   cursor: pointer;
   padding: 0;
   line-height: 1;
+  margin-left: 0.5rem;
 }
 
 .mic-check-close:hover {
@@ -1184,6 +1175,100 @@ input:disabled + .toggle-slider {
 }
 
 /* =========================================
+   9.5 MOBILE BOTTOM NAV + RESULTS TAKEOVER
+   ========================================= */
+
+/* Bottom nav hidden by default (desktop) */
+.bottom-nav { display: none; }
+
+/* Results takeover layout */
+.results-toolbar {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  background: var(--bg-white);
+  border-bottom: 1px solid var(--border-light);
+  z-index: 550;
+}
+.results-toolbar.visible { display: flex; }
+
+.results-grid.takeover {
+  position: fixed;
+  inset: 56px 0 64px 0; /* top toolbar 56, bottom nav 64 */
+  background: var(--bg-page);
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 8px;
+  z-index: 500;
+}
+
+.note-editor {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: pre-wrap;
+}
+
+/* Mobile styles */
+@media (max-width: 767px) {
+  body { overflow: hidden; }
+  .sidebar { display: none; }
+  .main-content { padding: 0; height: 100vh; padding-bottom: 64px; }
+  .view { padding: 0; overflow: hidden; }
+  .view-header { padding: 12px 16px; }
+  .setup-card { padding: 16px; box-shadow: none; border-radius: 0; }
+
+  /* Toolbar button sizes */
+  .btn-copy-large { font-size: 14px; padding: 10px 16px; border-radius: 9999px; }
+  .btn-back { font-size: 14px; padding: 8px 12px; }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: 64px;
+    background: #0f172a;
+    display: flex;
+    z-index: 600;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .bottom-nav .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #cbd5e1;
+    text-decoration: none;
+    font-size: 12px;
+    gap: 4px;
+    padding-top: 4px;
+  }
+  .bottom-nav .nav-item i { font-size: 18px; }
+  .bottom-nav .nav-item.active { color: #fff; }
+  .bottom-nav .nav-item:active { background: rgba(255,255,255,0.06); }
+
+  /* Make record button thumb-friendly */
+  .record-btn-circle { width: 72px; height: 72px; }
+
+  /* Panels inside takeover */
+  .results-grid.takeover .panel { height: 100%; overflow: hidden; }
+  .results-grid.takeover .scroll-box { height: 100%; }
+}
+
+/* =========================================
    10. MODALS
    ========================================= */
 .modal {
@@ -1308,19 +1393,19 @@ input:disabled + .toggle-slider {
     z-index: 1000;
     transition: left 0.3s ease;
   }
-  
+
   .sidebar.open {
     left: 0;
   }
-  
+
   .grid-2 {
     grid-template-columns: 1fr;
   }
-  
+
   .visits-filters {
     flex-direction: column;
   }
-  
+
   .visits-filters .input-modern,
   .visits-filters .select-modern {
     width: 100%;

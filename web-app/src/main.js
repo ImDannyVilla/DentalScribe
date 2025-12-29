@@ -44,6 +44,9 @@ let quickMicAnimation = null;
 // ============================================
 // UI Management
 // ============================================
+function isMobile() {
+  return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+}
 function showScreen(screenId) {
   console.log("🔄 showScreen called with:", screenId);
 
@@ -1207,7 +1210,7 @@ async function startRecording() {
   const transcriptEl = document.getElementById('transcript');
   const soapEl = document.getElementById('soap-note');
   if(transcriptEl) transcriptEl.value = '';
-  if(soapEl) soapEl.innerHTML = '';
+  if(soapEl) soapEl.value = '';
   // -------------------------------------------------------------
 
   try {
@@ -1256,7 +1259,19 @@ async function startRecording() {
 
     if(resultsPanel) {
       resultsPanel.classList.remove('hidden');
+      resultsPanel.classList.add('takeover');
     }
+
+    // Show mobile results toolbar
+    const resultsToolbar = document.getElementById('results-toolbar');
+    if(resultsToolbar) {
+      resultsToolbar.classList.remove('hidden');
+      resultsToolbar.classList.add('visible');
+    }
+
+    // Hide setup panel during recording/results
+    const setupPanel = document.getElementById('setup-panel');
+    if(setupPanel) setupPanel.classList.add('hidden');
 
   } catch (error) {
     console.error('Mic Error:', error);
@@ -1277,6 +1292,10 @@ function stopRecording() {
     }
 
     if(status) status.textContent = 'Processing audio...';
+
+    // Keep results view visible for reviewing
+    const resultsToolbar = document.getElementById('results-toolbar');
+    if(resultsToolbar) resultsToolbar.classList.add('visible');
   }
 }
 
@@ -1360,14 +1379,14 @@ async function generateVisitSummary(transcript) {
     const data = await response.json();
 
     const soapEl = document.getElementById('soap-note');
-    if(soapEl) soapEl.innerHTML = `<pre>${data.note}</pre>`;
+    if(soapEl) soapEl.value = data.note;
 
     const status = document.getElementById('recording-status');
     if(status) status.textContent = 'Note Generated Successfully';
 
   } catch (error) {
     const soapEl = document.getElementById('soap-note');
-    if(soapEl) soapEl.innerHTML = 'Failed to generate note.';
+    if(soapEl) soapEl.value = 'Failed to generate note.';
   }
 }
 
@@ -1382,7 +1401,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusEl = document.getElementById('recording-status');
 
   if(transcriptEl) transcriptEl.value = '';
-  if(soapEl) soapEl.innerHTML = '';
+  if(soapEl) soapEl.value = '';
   if(statusEl) statusEl.textContent = 'Ready to record';
 
   // ============================================
@@ -1481,7 +1500,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ============================================
-  // Sidebar Navigation
+  // Navigation (sidebar + bottom nav)
   // ============================================
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -1492,6 +1511,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  // Mobile bottom nav logout/profile
+  const logoutMobile = document.getElementById('logout-btn-mobile');
+  if (logoutMobile) logoutMobile.addEventListener('click', logout);
 
   // Sidebar Toggle
   const sidebarToggle = document.getElementById('sidebar-toggle');
@@ -1535,18 +1558,43 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Copy Button
-  const copyBtn = document.getElementById('copy-btn');
-  if(copyBtn) {
-    copyBtn.addEventListener('click', () => {
-      const note = document.getElementById('soap-note');
-      if(note) {
-        navigator.clipboard.writeText(note.innerText);
-        copyBtn.textContent = 'Copied!';
-        setTimeout(() => copyBtn.textContent = 'Copy', 2000);
+  // Back to setup
+  const backBtn = document.getElementById('back-to-setup');
+  if(backBtn) {
+    backBtn.addEventListener('click', () => {
+      const resultsPanel = document.getElementById('results-panel');
+      const resultsToolbar = document.getElementById('results-toolbar');
+      const setupPanel = document.getElementById('setup-panel');
+      if(resultsPanel) {
+        resultsPanel.classList.add('hidden');
+        resultsPanel.classList.remove('takeover');
       }
+      if(resultsToolbar) {
+        resultsToolbar.classList.add('hidden');
+        resultsToolbar.classList.remove('visible');
+      }
+      if(setupPanel) setupPanel.classList.remove('hidden');
     });
   }
+
+  // Copy Buttons (desktop header + mobile toolbar)
+  function handleCopy(btn) {
+    const note = document.getElementById('soap-note');
+    if(note) {
+      const text = note.value ?? note.innerText;
+      navigator.clipboard.writeText(text || '');
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = btn.id === 'copy-btn' ? 'Copy' : 'Copy';
+        btn.classList.remove('copied');
+      }, 1500);
+    }
+  }
+  const copyBtn = document.getElementById('copy-btn');
+  if(copyBtn) copyBtn.addEventListener('click', () => handleCopy(copyBtn));
+  const copyBtnMobile = document.getElementById('copy-btn-mobile');
+  if(copyBtnMobile) copyBtnMobile.addEventListener('click', () => handleCopy(copyBtnMobile));
 
   // ============================================
   // Templates Modal
