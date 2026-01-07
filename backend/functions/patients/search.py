@@ -3,18 +3,10 @@ import json
 import boto3
 import os
 from boto3.dynamodb.conditions import Key, Attr
+from security import format_response, format_error, validate_input
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ.get('PATIENTS_TABLE', 'DentalScribePatients-prod'))
-
-
-def get_cors_headers():
-    return {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-        'Access-Control-Allow-Methods': 'GET,OPTIONS'
-    }
 
 
 def levenshtein_distance(s1, s2):
@@ -87,38 +79,35 @@ def fuzzy_match_score(query, name):
 def lambda_handler(event, context):
     # Handle OPTIONS preflight
     if event.get('httpMethod') == 'OPTIONS':
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': ''
-        }
+        return format_response(200, {})
 
     try:
         # Get search query
         params = event.get('queryStringParameters') or {}
         query = params.get('q', '').strip()
-        limit = int(params.get('limit', 20))
+        
+        try:
+            limit = int(params.get('limit', 20))
+        except (ValueError, TypeError):
+            limit = 20
 
         if not query:
-            return {
-                'statusCode': 200,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'patients': [], 'count': 0})
-            }
+            return format_response(200, {'patients': [], 'count': 0})
 
         # Scan ALL patients (no practice_id filter for now)
-        all_patients = []
-        response = table.scan()
-        all_patients.extend(response.get('Items', []))
-
-        # Handle pagination
-        while 'LastEvaluatedKey' in response:
-            response = table.scan(
-                ExclusiveStartKey=response['LastEvaluatedKey']
-            )
+        try:
+            all_patients = []
+            response = table.scan()
             all_patients.extend(response.get('Items', []))
 
-        print(f"Found {len(all_patients)} total patients in table")
+            # Handle pagination
+            while 'LastEvaluatedKey' in response:
+                response = table.scan(
+                    ExclusiveStartKey=response['LastEvaluatedKey']
+                )
+                all_patients.extend(response.get('Items', []))
+        except Exception as e:
+            return format_error(500, "Failed to scan patients database", internal_error=e)
 
         # Score and filter patients
         scored_patients = []
@@ -153,22 +142,11 @@ def lambda_handler(event, context):
                 'created_at': p.get('created_at')
             })
 
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': json.dumps({
-                'patients': formatted_patients,
-                'count': len(formatted_patients),
-                'query': query
-            })
-        }
+        return format_response(200, {
+            'patients': formatted_patients,
+            'count': len(formatted_patients),
+            'query': query
+        })
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return {
-            'statusCode': 500,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "An unexpected error occurred", internal_error=e)

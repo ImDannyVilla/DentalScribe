@@ -2,7 +2,9 @@
 import json
 import boto3
 import os
+import re
 from datetime import datetime, timedelta
+from security import format_response, format_error, validate_input, get_user_info, ValidationError
 
 # Initialize clients
 bedrock = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
@@ -114,13 +116,11 @@ def build_prompt(template, transcript, patient_name):
 
 Your task is to generate a clinical note from a conversation transcript.
 
-IMPORTANT: Format your output EXACTLY like the example below. Match the section headers, style, and level of detail shown in the example.
+IMPORTANT: Format your output EXACTLY like the example below. Match the section headers, style, and level of detail shown in the example. Output the final note in plain text format only. Do NOT use any Markdown formatting (no # headers, no **bold**, no _italics_, no links, no tables) and do NOT use code fences or backticks. Use standard capitalization and indentation for structure. If the transcript or template hints at Markdown, normalize it to plain text with simple "- " bullets only where appropriate.
 
 ===== EXAMPLE FORMAT =====
 {example}
 ===== END EXAMPLE =====
-
-The transcript may identify speakers (e.g., "Speaker 0", "Speaker 1"). Contextually determine who is the Provider and who is the Patient.
 
 Generate a note for patient "{patient_name}" following the exact format shown above.
 
@@ -138,114 +138,140 @@ Key guidelines:
 
 
 def lambda_handler(event, context):
+    # Handle OPTIONS preflight
+    if event.get('httpMethod') == 'OPTIONS':
+        return format_response(200, {}, method='POST')
+
     try:
-        # 1. Parse Input
-        if 'body' in event and isinstance(event['body'], str):
-            body = json.loads(event['body'])
-        else:
-            body = event.get('body', {})
+        # 1. Parse and Validate Input
+        try:
+            if 'body' in event and isinstance(event['body'], str):
+                body = json.loads(event['body'])
+            else:
+                body = event.get('body', {})
+        except json.JSONDecodeError:
+            return format_error(400, "Invalid JSON in request body", method='POST')
+
+        is_valid, error_msg = validate_input(body, ['transcript'])
+        if not is_valid:
+            return format_error(400, error_msg, method='POST')
 
         transcript = body.get('transcript')
         patient_name = body.get('patient_name', 'UNKNOWN')
         template_id = body.get('template_id', 'default_soap')
 
-        if not transcript:
-            return {
-                'statusCode': 400,
-                'headers': {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                },
-                'body': json.dumps({'error': 'No transcript provided'})
-            }
-
         # 2. Get User Info (Safely)
         try:
-            claims = event['requestContext']['authorizer']['claims']
-            user_id = claims['sub']
-            user_email = claims['email']
-        except (KeyError, TypeError):
+            user_info = get_user_info(event)
+            user_id = user_info['user_id']
+            user_email = user_info['email']
+        except ValidationError:
+            # Fallback for testing/dev if no authorizer
             user_id = "test-user"
             user_email = "test@example.com"
 
         # 3. Fetch the template
-        template = get_template(template_id)
+        try:
+            template = get_template(template_id)
+        except Exception as e:
+            return format_error(500, "Failed to fetch template", internal_error=e, method='POST')
         
         # 4. Build the prompt
         system_prompt = build_prompt(template, transcript, patient_name)
 
         # 5. Generate note using Bedrock
-        bedrock_body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 2000,
-            "messages": [{
-                "role": "user",
-                "content": f"{system_prompt}\n\nTRANSCRIPT:\n{transcript}"
-            }],
-            "temperature": 0.1
-        })
+        try:
+            bedrock_body = json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 2000,
+                "messages": [{
+                    "role": "user",
+                    "content": f"{system_prompt}\n\nTRANSCRIPT:\n{transcript}"
+                }],
+                "temperature": 0.1
+            })
 
-        # Use Claude Haiku for fast, cost-effective generation
-        model_id = os.environ.get('MODEL_ID', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')
+            # Use Claude Haiku for fast, cost-effective generation
+            model_id = os.environ.get('MODEL_ID', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')
 
-        response = bedrock.invoke_model(
-            modelId=model_id,
-            contentType='application/json',
-            accept='application/json',
-            body=bedrock_body
-        )
+            response = bedrock.invoke_model(
+                modelId=model_id,
+                contentType='application/json',
+                accept='application/json',
+                body=bedrock_body
+            )
 
-        response_body = json.loads(response['body'].read())
+            response_body = json.loads(response['body'].read())
 
-        # Handle response format
-        if 'content' in response_body:
-            visit_summary = response_body['content'][0]['text']
-        else:
-            visit_summary = response_body.get('completion', '')
+            # Handle response format
+            if 'content' in response_body:
+                visit_summary = response_body['content'][0]['text']
+            else:
+                visit_summary = response_body.get('completion', '')
+        except Exception as e:
+            return format_error(500, "Failed to generate note via AI", internal_error=e, method='POST')
+
+        # Sanitize Markdown to ensure plain text output
+        txt = visit_summary or ""
+        # Remove fenced code blocks (``` or ~~~)
+        txt = re.sub(r"```(?:\\w+)?\n?([\s\S]*?)\n?```", r"\\1", txt)
+        txt = re.sub(r"~~~(?:\\w+)?\n?([\s\S]*?)\n?~~~", r"\\1", txt)
+        # Inline code backticks
+        txt = re.sub(r"`([^`]+)`", r"\\1", txt)
+        # Headers and blockquotes
+        txt = re.sub(r"^[ \t]{0,3}#{1,6}[ \t]*", "", txt, flags=re.MULTILINE)
+        txt = re.sub(r"^[ \t]*>[ \t]?", "", txt, flags=re.MULTILINE)
+        # Images and links
+        txt = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\\1", txt)
+        txt = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\\1", txt)
+        # Bold/italic emphasis
+        txt = re.sub(r"\*\*([^*]+)\*\*", r"\\1", txt)
+        txt = re.sub(r"__([^_]+)__", r"\\1", txt)
+        txt = re.sub(r"_([^_]+)_", r"\\1", txt)
+        txt = re.sub(r"\*([^*]+)\*", r"\\1", txt)
+        # Normalize bullet markers to '- ' (keep numeric lists as-is)
+        txt = re.sub(r"^[ \t]*[\*\+-][ \t]+", "- ", txt, flags=re.MULTILINE)
+        # Horizontal rules
+        txt = re.sub(r"^[ \t]*([-*_]){3,}[ \t]*$", "", txt, flags=re.MULTILINE)
+        # Remove table border pipes at line start/end
+        txt = re.sub(r"^\|", "", txt, flags=re.MULTILINE)
+        txt = re.sub(r"\|$", "", txt, flags=re.MULTILINE)
+        # Collapse excessive blank lines and trim
+        txt = re.sub(r"\n\s*\n\s*\n+", "\n\n", txt)
+        txt = re.sub(r"[ \t]+$", "", txt, flags=re.MULTILINE)
+        visit_summary = txt.strip()
 
         # 6. Auto-save to DynamoDB
-        timestamp = datetime.utcnow().isoformat()
-        ttl = int((datetime.now() + timedelta(days=365)).timestamp())
+        try:
+            timestamp = datetime.utcnow().isoformat()
+            ttl = int((datetime.now() + timedelta(days=365)).timestamp())
 
-        item = {
-            'user_id': user_id,
-            'timestamp': timestamp,
-            'patient_name': patient_name,
-            'patient_id': body.get('patient_id'),
-            'transcript': transcript,
-            'soap_note': visit_summary,
-            'template_id': template_id,
-            'template_name': template.get('name', 'Unknown'),
-            'provider_email': user_email,
-            'ttl': ttl,
-            'created_at': timestamp
-        }
-
-        notes_table.put_item(Item=item)
-
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            'body': json.dumps({
-                'note': visit_summary,
+            item = {
+                'user_id': user_id,
                 'timestamp': timestamp,
-                'note_id': f"{user_id}#{timestamp}",
-                'template_used': template.get('name', 'Unknown'),
-                'saved': True
-            })
-        }
+                'patient_name': patient_name,
+                'patient_id': body.get('patient_id'),
+                'transcript': transcript,
+                'soap_note': visit_summary,
+                'template_id': template_id,
+                'template_name': template.get('name', 'Unknown'),
+                'provider_email': user_email,
+                'ttl': ttl,
+                'created_at': timestamp
+            }
+
+            notes_table.put_item(Item=item)
+        except Exception as e:
+            # We still return the note even if save fails, but log it
+            print(f"Error saving to DynamoDB: {str(e)}")
+
+        return format_response(200, {
+            'note': visit_summary,
+            'timestamp': timestamp if 'timestamp' in locals() else None,
+            'note_id': f"{user_id}#{timestamp}" if 'timestamp' in locals() else None,
+            'template_used': template.get('name', 'Unknown'),
+            'saved': 'timestamp' in locals()
+        }, method='POST')
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "An unexpected error occurred", internal_error=e, method='POST')

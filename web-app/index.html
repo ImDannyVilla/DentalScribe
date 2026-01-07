@@ -32,11 +32,11 @@
 
             <div class="input-group">
               <label>Email Address</label>
-              <input type="email" id="email" placeholder="name@clinic.com">
+              <input type="email" id="email" placeholder="name@clinic.com" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
             <div class="input-group">
               <label>Password</label>
-              <input type="password" id="password" placeholder="••••••••">
+              <input type="password" id="password" placeholder="••••••••" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
 
             <button id="login-btn" class="btn-primary-block">Sign In</button>
@@ -64,7 +64,7 @@
 
             <div class="input-group">
               <label>Email Address</label>
-              <input type="email" id="forgot-email" placeholder="name@clinic.com">
+              <input type="email" id="forgot-email" placeholder="name@clinic.com" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
 
             <button id="send-code-btn" class="btn-primary-block">Send Verification Code</button>
@@ -92,15 +92,15 @@
 
             <div class="input-group">
               <label>Verification Code</label>
-              <input type="text" id="verification-code" placeholder="Enter 6-digit code">
+              <input type="text" id="verification-code" placeholder="Enter 6-digit code" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
             <div class="input-group">
               <label>New Password</label>
-              <input type="password" id="new-password" placeholder="••••••••">
+              <input type="password" id="new-password" placeholder="••••••••" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
             <div class="input-group">
               <label>Confirm New Password</label>
-              <input type="password" id="confirm-password" placeholder="••••••••">
+              <input type="password" id="confirm-password" placeholder="••••••••" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
 
             <button id="reset-password-btn" class="btn-primary-block">Reset Password</button>
@@ -194,7 +194,7 @@
             <div id="setup-panel" class="setup-card">
               <div class="card-row">
                 <label class="input-label">Patient</label>
-                <input type="text" id="patient-search" class="input-modern" placeholder="Search or create patient...">
+                <input type="text" id="patient-search" class="input-modern" placeholder="Search or create patient..." autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
                 <div id="patient-results" class="results-dropdown" style="display:none;"></div>
               </div>
 
@@ -230,20 +230,25 @@
               <button id="back-to-setup" class="btn-secondary btn-back"><i class="fa-solid fa-arrow-left"></i> Back</button>
               <button id="copy-btn-mobile" class="btn-primary btn-copy-large"><i class="fa-regular fa-copy"></i> Copy</button>
             </div>
-            <div id="results-panel" class="results-grid hidden">
-              <div class="panel">
-                <div class="panel-header">
-                  <h4><i class="fa-regular fa-file-lines"></i> Live Transcript</h4>
+            <div id="results-panel" class="results-center hidden">
+              <div class="results-card">
+                <div class="card-header">
+                  <h4><i class="fa-solid fa-wand-magic-sparkles"></i> Generated Clinical Note - <span id="current-patient-name"></span></h4>
+                  <div class="header-actions">
+                    <button id="new-convo-btn" class="btn-small">New Conversation</button>
+                    <button id="copy-btn" class="btn-small">Copy</button>
+                  </div>
                 </div>
-                <textarea id="transcript" class="scroll-box" readonly></textarea>
-              </div>
-
-              <div class="panel">
-                <div class="panel-header">
-                  <h4><i class="fa-solid fa-wand-magic-sparkles"></i> Generated Note</h4>
-                  <button id="copy-btn" class="btn-small">Copy</button>
+                <div class="tab-bar">
+                  <button id="tab-btn-note" class="tab-button active">Note</button>
+                  <button id="tab-btn-transcript" class="tab-button">Transcript</button>
                 </div>
-                <textarea id="soap-note" class="scroll-box note-editor" placeholder="Note will generate here..."></textarea>
+                <div id="tab-content-note" class="tab-content">
+                  <textarea id="soap-note" class="scroll-box note-editor" placeholder="Note will generate here..."></textarea>
+                </div>
+                <div id="tab-content-transcript" class="tab-content hidden">
+                  <textarea id="transcript" class="scroll-box note-editor" readonly></textarea>
+                </div>
               </div>
             </div>
           </div>
@@ -370,11 +375,11 @@ PLAN:
                 <div class="invite-form">
                   <div class="input-group">
                     <label>Email Address</label>
-                    <input type="email" id="invite-email" class="input-modern" placeholder="colleague@clinic.com">
+                    <input type="email" id="invite-email" class="input-modern" placeholder="colleague@clinic.com" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
                   </div>
                   <div class="input-group">
                     <label>Name</label>
-                    <input type="text" id="invite-name" class="input-modern" placeholder="Dr. Jane Smith">
+                    <input type="text" id="invite-name" class="input-modern" placeholder="Dr. Jane Smith" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
                   </div>
                   <div class="input-group">
                     <label>Role</label>

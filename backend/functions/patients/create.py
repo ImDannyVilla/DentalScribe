@@ -4,52 +4,42 @@ import boto3
 import os
 import uuid
 from datetime import datetime
+from security import format_response, format_error, validate_input, get_user_info, ValidationError
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ.get('PATIENTS_TABLE', 'DentalScribePatients-prod'))
 
 
-def get_cors_headers():
-    return {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-        'Access-Control-Allow-Methods': 'POST,OPTIONS'
-    }
-
-
 def lambda_handler(event, context):
     # Handle OPTIONS preflight
     if event.get('httpMethod') == 'OPTIONS':
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': ''
-        }
+        return format_response(200, {}, method='POST')
 
     try:
         # Get user info from Cognito
-        claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
-        user_id = claims.get('sub', 'unknown')
+        try:
+            user_info = get_user_info(event)
+            user_id = user_info['user_id']
+        except ValidationError:
+            user_id = 'unknown'
 
         # Use 'default' as practice_id for simplicity
-        # Change this if you want multi-tenant support
         practice_id = 'default'
 
-        # Parse request body
-        body = json.loads(event.get('body', '{}'))
+        # Parse and Validate request body
+        try:
+            body = json.loads(event.get('body', '{}'))
+        except json.JSONDecodeError:
+            return format_error(400, "Invalid JSON in request body", method='POST')
+            
+        is_valid, error_msg = validate_input(body, ['name'])
+        if not is_valid:
+            return format_error(400, error_msg, method='POST')
 
         name = body.get('name', '').strip()
         email = body.get('email', '').strip()
         phone = body.get('phone', '').strip()
         date_of_birth = body.get('date_of_birth', '').strip()
-
-        if not name:
-            return {
-                'statusCode': 400,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Patient name is required'})
-            }
 
         # Generate patient ID
         patient_id = f"pat_{uuid.uuid4().hex[:12]}"
@@ -74,30 +64,22 @@ def lambda_handler(event, context):
         if date_of_birth:
             item['date_of_birth'] = date_of_birth
 
-        table.put_item(Item=item)
+        try:
+            table.put_item(Item=item)
+        except Exception as e:
+            return format_error(500, "Failed to save patient to database", internal_error=e, method='POST')
 
-        return {
-            'statusCode': 201,
-            'headers': get_cors_headers(),
-            'body': json.dumps({
-                'message': 'Patient created successfully',
-                'patient': {
-                    'patient_id': patient_id,
-                    'name': name,
-                    'email': email if email else None,
-                    'phone': phone if phone else None,
-                    'date_of_birth': date_of_birth if date_of_birth else None,
-                    'created_at': timestamp
-                }
-            })
-        }
+        return format_response(201, {
+            'message': 'Patient created successfully',
+            'patient': {
+                'patient_id': patient_id,
+                'name': name,
+                'email': email if email else None,
+                'phone': phone if phone else None,
+                'date_of_birth': date_of_birth if date_of_birth else None,
+                'created_at': timestamp
+            }
+        }, method='POST')
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return {
-            'statusCode': 500,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "An unexpected error occurred", internal_error=e, method='POST')

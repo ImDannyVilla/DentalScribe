@@ -19,6 +19,17 @@ const PATIENTS_API = config.apiEndpoint;
 
 const userPool = new CognitoUserPool(poolData);
 
+// ============================================
+// Security Utilities
+// ============================================
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  if (typeof text !== 'string') return String(text);
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // --- GLOBAL VARIABLES ---
 let currentUser = null;
 let idToken = null;
@@ -44,6 +55,18 @@ let quickMicAnimation = null;
 // ============================================
 // UI Management
 // ============================================
+function resetPatientSearchUI() {
+  // Clear selected patient state and UI widgets related to patient selection
+  selectedPatient = null;
+  const input = document.getElementById('patient-search');
+  if (input) input.value = '';
+  const results = document.getElementById('patient-results');
+  if (results) results.style.display = 'none';
+  const nameSpan = document.getElementById('current-patient-name');
+  if (nameSpan) nameSpan.textContent = '';
+  const status = document.getElementById('recording-status');
+  if (status) { status.textContent = 'Ready to record'; status.style.color = ''; }
+}
 function isMobile() {
   return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
 }
@@ -120,8 +143,31 @@ function showSuccess(elementId, message) {
 // ============================================
 // Authentication Functions
 // ============================================
+
+function setLoginButtonLoading(loading) {
+  const btn = document.getElementById('login-btn');
+  if (!btn) return;
+  if (loading) {
+    if (!btn.dataset.originalHtml) {
+      btn.dataset.originalHtml = btn.innerHTML;
+    }
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing in...';
+  } else {
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    if (btn.dataset.originalHtml) {
+      btn.innerHTML = btn.dataset.originalHtml;
+    } else {
+      btn.textContent = 'Sign In';
+    }
+  }
+}
+
 function login(email, password) {
   console.log("🔐 Attempting Login for:", email); // DEBUG
+  setLoginButtonLoading(true);
 
   const authenticationDetails = new AuthenticationDetails({
     Username: email,
@@ -138,21 +184,35 @@ function login(email, password) {
   cognitoUser.authenticateUser(authenticationDetails, {
     onSuccess: (result) => {
       console.log("✅ Login Successful!");
+      setLoginButtonLoading(false);
 
       idToken = result.getIdToken().getJwtToken();
 
-      // --- DEBUGGING TOKEN ---
-      window.idToken = idToken;
-      console.log("🔑 Token Received (First 20 chars):", idToken.substring(0, 20) + "...");
-      console.log("🔑 Token Type:", typeof idToken);
-      // ----------------------
 
       currentUser = cognitoUser;
 
       // Decode JWT to get role
       const payload = JSON.parse(atob(idToken.split('.')[1]));
-      const groups = payload['cognito:groups'] || [];
-      userRole = Array.isArray(groups) && groups.includes('Admin') ? 'admin' : 'user';
+      const rawGroups = payload['cognito:groups'] || [];
+      let groupsList = [];
+      if (Array.isArray(rawGroups)) {
+        groupsList = rawGroups;
+      } else if (typeof rawGroups === 'string') {
+        try {
+          const parsed = JSON.parse(rawGroups);
+          if (Array.isArray(parsed)) {
+            groupsList = parsed;
+          } else if (typeof parsed === 'string') {
+            groupsList = [parsed];
+          } else {
+            groupsList = [rawGroups];
+          }
+        } catch (e) {
+          groupsList = rawGroups.split(',').map(g => g.trim()).filter(Boolean);
+        }
+      }
+      const isAdmin = groupsList.some(g => String(g).trim().toLowerCase() === 'admin');
+      userRole = isAdmin ? 'admin' : 'user';
       userEmail = payload.email || email;
 
       console.log("User role:", userRole);
@@ -168,6 +228,9 @@ function login(email, password) {
         });
       }
 
+      // Ensure patient search state is fresh on new login
+      resetPatientSearchUI();
+
       // Switch to dashboard
       showScreen('dashboard-screen');
       showView('scribe');
@@ -178,10 +241,12 @@ function login(email, password) {
 
     onFailure: (err) => {
       console.error("Login Failed:", err);
+      setLoginButtonLoading(false);
       showError('login-error', err.message || 'Login failed');
     },
 
     newPasswordRequired: (userAttributes, requiredAttributes) => {
+      setLoginButtonLoading(false);
       alert('Password change required. Please contact admin.');
     }
   });
@@ -208,6 +273,9 @@ function logout() {
   // Reset UI
   const results = document.getElementById('results-panel');
   if(results) results.classList.add('hidden');
+
+  // Clear patient search and selection to avoid stale values
+  resetPatientSearchUI();
 
   showScreen('login-screen');
 }
@@ -451,13 +519,13 @@ function renderTemplates() {
   list.innerHTML = templatesCache.map(template => `
     <div class="template-card" data-id="${template.template_id}">
       <div class="template-card-header">
-        <span class="template-name">${template.name}</span>
+        <span class="template-name">${escapeHtml(template.name)}</span>
         <span class="template-badge ${template.is_default ? 'default' : 'custom'}">
           ${template.is_default ? 'Default' : 'Custom'}
         </span>
       </div>
-      <p class="template-description">${template.description || 'No description'}</p>
-      <div class="template-preview">${template.example_output || ''}</div>
+      <p class="template-description">${escapeHtml(template.description) || 'No description'}</p>
+      <div class="template-preview">${escapeHtml(template.example_output) || ''}</div>
       <div class="template-actions">
         <button class="btn-edit" onclick="editTemplate('${template.template_id}')">
           <i class="fa-solid fa-pen"></i> Edit
@@ -487,7 +555,7 @@ async function loadTemplateDropdown() {
     const templates = data.templates || getDefaultTemplates();
 
     select.innerHTML = templates.map(t =>
-      `<option value="${t.template_id}">${t.name}</option>`
+      `<option value="${escapeHtml(t.template_id)}">${escapeHtml(t.name)}</option>`
     ).join('');
 
   } catch (error) {
@@ -567,7 +635,14 @@ async function saveTemplate() {
       body: JSON.stringify({ name, description, example_output })
     });
 
-    if(!response.ok) throw new Error('Failed to save template');
+    if(!response.ok) {
+      let detail = '';
+      try {
+        const errData = await response.json();
+        detail = errData.error || errData.message || '';
+      } catch (_) {}
+      throw new Error(detail || `${response.status} ${response.statusText}`);
+    }
 
     closeTemplateModal();
     loadTemplates();
@@ -575,7 +650,8 @@ async function saveTemplate() {
 
   } catch (error) {
     console.error('Error saving template:', error);
-    alert('Failed to save template: ' + error.message);
+    const msg = error && error.message ? error.message : '';
+    alert(`Failed to save template${msg ? ': ' + msg : ''}`);
   }
 }
 
@@ -602,6 +678,7 @@ async function deleteTemplate(templateId) {
 // Make functions globally available for onclick handlers
 window.editTemplate = (id) => openTemplateModal(id);
 window.deleteTemplate = deleteTemplate;
+window.loadTeamMembers = loadTeamMembers;
 
 // ============================================
 // Visits Functions
@@ -703,12 +780,12 @@ function renderVisits(filter = 'all', searchQuery = '') {
           <i class="fa-solid fa-notes-medical"></i>
         </div>
         <div class="visit-info">
-          <div class="visit-patient">${visit.patient_name || 'Unknown Patient'}</div>
+          <div class="visit-patient">${escapeHtml(visit.patient_name) || 'Unknown Patient'}</div>
           <div class="visit-meta">
             <span><i class="fa-regular fa-calendar"></i> ${formattedDate}</span>
             <span><i class="fa-regular fa-clock"></i> ${formattedTime}</span>
             ${userRole === 'admin' && visit.provider_email ? `
-              <span><i class="fa-regular fa-user"></i> ${visit.provider_email}</span>
+              <span><i class="fa-regular fa-user"></i> ${escapeHtml(visit.provider_email)}</span>
             ` : ''}
           </div>
         </div>
@@ -841,7 +918,8 @@ async function loadTeamMembers() {
       list.innerHTML = `
         <div class="empty-state">
           <i class="fa-solid fa-users"></i>
-          <p>No team members yet</p>
+          <p>No members yet</p>
+          <p class="empty-subtext">Invite your team using the form</p>
         </div>
       `;
       return;
@@ -861,10 +939,10 @@ async function loadTeamMembers() {
 
       return `
         <div class="team-member-card">
-          <div class="team-member-avatar">${initials}</div>
+          <div class="team-member-avatar">${escapeHtml(initials)}</div>
           <div class="team-member-info">
-            <div class="team-member-name">${user.name || 'No Name'}</div>
-            <div class="team-member-email">${user.email}</div>
+            <div class="team-member-name">${escapeHtml(user.name) || 'No Name'}</div>
+            <div class="team-member-email">${escapeHtml(user.email)}</div>
           </div>
           <span class="team-member-badge ${badgeClass}">${badgeText}</span>
         </div>
@@ -874,9 +952,10 @@ async function loadTeamMembers() {
   } catch (error) {
     console.error('Error loading team:', error);
     list.innerHTML = `
-      <div class="empty-state">
+      <div class="empty-state error">
         <i class="fa-solid fa-exclamation-circle"></i>
-        <p>Failed to load team members</p>
+        <p>Failed to load team</p>
+        <button class="btn-secondary" onclick="loadTeamMembers()">Try Again</button>
       </div>
     `;
   }
@@ -1137,7 +1216,7 @@ async function showPatientResults(query) {
     patients.forEach(patient => {
       const item = document.createElement('div');
       item.className = 'patient-result-item';
-      item.innerHTML = `<strong>${patient.name}</strong> <span style="color:#64748b; font-size:0.8em">${patient.patient_id ? '#' + patient.patient_id.substring(4,8) : ''}</span>`;
+      item.innerHTML = `<strong>${escapeHtml(patient.name)}</strong> <span style="color:#64748b; font-size:0.8em">${patient.patient_id ? '#' + escapeHtml(patient.patient_id.substring(4,8)) : ''}</span>`;
       item.onclick = () => selectPatient(patient);
       resultsDiv.appendChild(item);
     });
@@ -1146,7 +1225,7 @@ async function showPatientResults(query) {
   // Always show "Create new" option
   const addNew = document.createElement('div');
   addNew.className = 'patient-result-item add-new';
-  addNew.innerHTML = `<i class="fa-solid fa-plus"></i> Create new: "${query}"`;
+  addNew.innerHTML = `<i class="fa-solid fa-plus"></i> Create new: "${escapeHtml(query)}"`;
   addNew.onclick = () => createNewPatient(query);
   resultsDiv.appendChild(addNew);
 }
@@ -1191,10 +1270,12 @@ function selectPatient(patient) {
   const input = document.getElementById('patient-search');
   const results = document.getElementById('patient-results');
   const status = document.getElementById('recording-status');
+  const nameSpan = document.getElementById('current-patient-name');
 
   if(input) input.value = patient.name;
   if(results) results.style.display = 'none';
   if(status) status.textContent = `Ready to record for ${patient.name}`;
+  if(nameSpan) nameSpan.textContent = patient.name;
 }
 
 // ============================================
@@ -1211,7 +1292,16 @@ async function startRecording() {
   const soapEl = document.getElementById('soap-note');
   if(transcriptEl) transcriptEl.value = '';
   if(soapEl) soapEl.value = '';
+  // Reset transcript collapsed state
+  const transcriptSection = document.getElementById('transcript-section');
+  const toggleTranscriptBtn = document.getElementById('toggle-transcript-btn');
+  if (transcriptSection) transcriptSection.classList.add('hidden');
+  if (toggleTranscriptBtn) toggleTranscriptBtn.textContent = 'View Transcript';
   // -------------------------------------------------------------
+
+  // Update header patient name
+  const nameSpan = document.getElementById('current-patient-name');
+  if (nameSpan && selectedPatient && selectedPatient.name) nameSpan.textContent = selectedPatient.name;
 
   try {
      const constraints = {
@@ -1257,21 +1347,6 @@ async function startRecording() {
 
     if(status) status.textContent = 'Recording in progress...';
 
-    if(resultsPanel) {
-      resultsPanel.classList.remove('hidden');
-      resultsPanel.classList.add('takeover');
-    }
-
-    // Show mobile results toolbar
-    const resultsToolbar = document.getElementById('results-toolbar');
-    if(resultsToolbar) {
-      resultsToolbar.classList.remove('hidden');
-      resultsToolbar.classList.add('visible');
-    }
-
-    // Hide setup panel during recording/results
-    const setupPanel = document.getElementById('setup-panel');
-    if(setupPanel) setupPanel.classList.add('hidden');
 
   } catch (error) {
     console.error('Mic Error:', error);
@@ -1371,6 +1446,14 @@ async function transcribeAudio(audioBlob) {
     const transcriptEl = document.getElementById('transcript');
     if(transcriptEl) transcriptEl.value = transcript;
 
+    // Reveal results panel now that recording has stopped and we have a transcript
+    const resultsPanel = document.getElementById('results-panel');
+    const setupPanel = document.getElementById('setup-panel');
+    const resultsToolbar = document.getElementById('results-toolbar');
+    if (resultsPanel) { resultsPanel.classList.remove('hidden'); resultsPanel.classList.add('takeover'); }
+    if (setupPanel) setupPanel.classList.add('hidden');
+    if (resultsToolbar) { resultsToolbar.classList.remove('hidden'); resultsToolbar.classList.add('visible'); }
+
     const status = document.getElementById('recording-status');
     if(status) status.textContent = 'Generating Clinical Note...';
     setLoaderText('Generating clinical note...');
@@ -1425,6 +1508,8 @@ async function generateVisitSummary(transcript) {
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
   console.log("🚀 Scribe32 App Loaded");
+  // Ensure no stale patient search persists across reloads
+  resetPatientSearchUI();
   // --- FIX: Clear stale data on page load ---
   const transcriptEl = document.getElementById('transcript');
   const soapEl = document.getElementById('soap-note');
@@ -1434,6 +1519,21 @@ document.addEventListener('DOMContentLoaded', () => {
   if(soapEl) soapEl.value = '';
   if(statusEl) statusEl.textContent = 'Ready to record';
 
+  // --- Clear auth fields on page load to prevent autofill/stale data ---
+  const emailInput = document.getElementById('email');
+  const passInput = document.getElementById('password');
+  const forgotEmailInput = document.getElementById('forgot-email');
+  const verificationCodeInput = document.getElementById('verification-code');
+  const newPasswordInput = document.getElementById('new-password');
+  const confirmPasswordInput = document.getElementById('confirm-password');
+
+  if (emailInput) emailInput.value = '';
+  if (passInput) passInput.value = '';
+  if (forgotEmailInput) forgotEmailInput.value = '';
+  if (verificationCodeInput) verificationCodeInput.value = '';
+  if (newPasswordInput) newPasswordInput.value = '';
+  if (confirmPasswordInput) confirmPasswordInput.value = '';
+
   // ============================================
   // Login Handlers
   // ============================================
@@ -1442,6 +1542,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const passInput = document.getElementById('password');
 
     if (!emailInput || !passInput) return;
+
+    // Prevent duplicate submissions while loading
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn && loginBtn.disabled) return;
 
     const email = emailInput.value.trim();
     const password = passInput.value;
@@ -1575,6 +1679,38 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ============================================
+  // Tabs: Note / Transcript in Scribe Results
+  // ============================================
+  const tabBtnNote = document.getElementById('tab-btn-note');
+  const tabBtnTranscript = document.getElementById('tab-btn-transcript');
+  const tabContentNote = document.getElementById('tab-content-note');
+  const tabContentTranscript = document.getElementById('tab-content-transcript');
+
+  const switchToNoteTab = () => {
+    if (tabContentNote && tabContentTranscript) {
+      tabContentNote.classList.remove('hidden');
+      tabContentTranscript.classList.add('hidden');
+    }
+    if (tabBtnNote) tabBtnNote.classList.add('active');
+    if (tabBtnTranscript) tabBtnTranscript.classList.remove('active');
+  };
+
+  const switchToTranscriptTab = () => {
+    if (tabContentNote && tabContentTranscript) {
+      tabContentNote.classList.add('hidden');
+      tabContentTranscript.classList.remove('hidden');
+    }
+    if (tabBtnNote) tabBtnNote.classList.remove('active');
+    if (tabBtnTranscript) tabBtnTranscript.classList.add('active');
+  };
+
+  if (tabBtnNote) tabBtnNote.addEventListener('click', switchToNoteTab);
+  if (tabBtnTranscript) tabBtnTranscript.addEventListener('click', switchToTranscriptTab);
+
+  // Default to Note tab on load
+  switchToNoteTab();
+
+  // ============================================
   // Recording
   // ============================================
   const recordBtn = document.getElementById('record-btn');
@@ -1604,6 +1740,45 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsToolbar.classList.remove('visible');
       }
       if(setupPanel) setupPanel.classList.remove('hidden');
+
+      // Reset transcript collapsed state
+      const transcriptSection = document.getElementById('transcript-section');
+      const toggleTranscriptBtn = document.getElementById('toggle-transcript-btn');
+      if (transcriptSection) transcriptSection.classList.add('hidden');
+      if (toggleTranscriptBtn) toggleTranscriptBtn.textContent = 'View Transcript';
+    });
+  }
+
+  // New Conversation button in Results header
+  const newConvoBtn = document.getElementById('new-convo-btn');
+  if (newConvoBtn) {
+    newConvoBtn.addEventListener('click', () => {
+      const resultsPanel = document.getElementById('results-panel');
+      const resultsToolbar = document.getElementById('results-toolbar');
+      const setupPanel = document.getElementById('setup-panel');
+      if (resultsPanel) {
+        resultsPanel.classList.add('hidden');
+        resultsPanel.classList.remove('takeover');
+      }
+      if (resultsToolbar) {
+        resultsToolbar.classList.add('hidden');
+        resultsToolbar.classList.remove('visible');
+      }
+      if (setupPanel) setupPanel.classList.remove('hidden');
+
+      // Clear fields and reset UI state
+      const transcriptEl = document.getElementById('transcript');
+      const soapEl = document.getElementById('soap-note');
+      if (transcriptEl) transcriptEl.value = '';
+      if (soapEl) soapEl.value = '';
+
+      const status = document.getElementById('recording-status');
+      if (status) { status.textContent = 'Ready to record'; status.style.color = ''; }
+
+      const transcriptSection = document.getElementById('transcript-section');
+      const toggleTranscriptBtn = document.getElementById('toggle-transcript-btn');
+      if (transcriptSection) transcriptSection.classList.add('hidden');
+      if (toggleTranscriptBtn) toggleTranscriptBtn.textContent = 'View Transcript';
     });
   }
 
@@ -1625,6 +1800,23 @@ document.addEventListener('DOMContentLoaded', () => {
   if(copyBtn) copyBtn.addEventListener('click', () => handleCopy(copyBtn));
   const copyBtnMobile = document.getElementById('copy-btn-mobile');
   if(copyBtnMobile) copyBtnMobile.addEventListener('click', () => handleCopy(copyBtnMobile));
+
+  // Transcript toggle
+  const toggleTranscriptBtn = document.getElementById('toggle-transcript-btn');
+  if (toggleTranscriptBtn) {
+    toggleTranscriptBtn.addEventListener('click', () => {
+      const transcriptSection = document.getElementById('transcript-section');
+      if (!transcriptSection) return;
+      const isHidden = transcriptSection.classList.contains('hidden');
+      if (isHidden) {
+        transcriptSection.classList.remove('hidden');
+        toggleTranscriptBtn.textContent = 'Hide Transcript';
+      } else {
+        transcriptSection.classList.add('hidden');
+        toggleTranscriptBtn.textContent = 'View Transcript';
+      }
+    });
+  }
 
   // ============================================
   // Templates Modal

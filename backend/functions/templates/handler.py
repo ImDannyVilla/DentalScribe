@@ -5,6 +5,7 @@ import os
 import uuid
 from datetime import datetime
 from boto3.dynamodb.conditions import Key
+from security import format_response, format_error, validate_input, require_admin, ValidationError
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ.get('TEMPLATES_TABLE', 'DentalScribeTemplates-prod'))
@@ -89,88 +90,46 @@ RECOMMENDATIONS:
 ]
 
 
-def get_cors_headers():
-    return {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
-    }
-
-
 def lambda_handler(event, context):
     """Main handler that routes to appropriate function based on HTTP method"""
     
     # Handle OPTIONS preflight
     if event.get('httpMethod') == 'OPTIONS':
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': ''
-        }
+        return format_response(200, {})
     
     http_method = event.get('httpMethod', 'GET')
     path_params = event.get('pathParameters') or {}
     template_id = path_params.get('template_id')
     
     try:
-        # Get user info from Cognito claims
-        claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
-        user_id = claims.get('sub', 'anonymous')
-        groups = claims.get('cognito:groups', [])
-        user_role = 'admin' if ('Admin' in groups if isinstance(groups, list) else False) else 'user'
-        
         if http_method == 'GET':
             if template_id:
                 return get_template(template_id)
             else:
-                return list_templates(user_id)
+                return list_templates()
         
-        elif http_method == 'POST':
-            # Only admins can create templates
-            if user_role != 'admin':
-                return {
-                    'statusCode': 403,
-                    'headers': get_cors_headers(),
-                    'body': json.dumps({'error': 'Only admins can create templates'})
-                }
-            return create_template(event, user_id)
+        # POST/PUT/DELETE - admin only
+        if http_method in ['POST', 'PUT', 'DELETE']:
+            try:
+                user_info = require_admin(event)
+                user_id = user_info['user_id']
+            except ValidationError as e:
+                return format_error(403, e.message, method=http_method)
+            
+            if http_method == 'POST':
+                return create_template(event, user_id)
+            elif http_method == 'PUT':
+                return update_template(event, template_id, user_id)
+            elif http_method == 'DELETE':
+                return delete_template(template_id)
         
-        elif http_method == 'PUT':
-            if user_role != 'admin':
-                return {
-                    'statusCode': 403,
-                    'headers': get_cors_headers(),
-                    'body': json.dumps({'error': 'Only admins can update templates'})
-                }
-            return update_template(event, template_id, user_id)
-        
-        elif http_method == 'DELETE':
-            if user_role != 'admin':
-                return {
-                    'statusCode': 403,
-                    'headers': get_cors_headers(),
-                    'body': json.dumps({'error': 'Only admins can delete templates'})
-                }
-            return delete_template(template_id)
-        
-        else:
-            return {
-                'statusCode': 405,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Method not allowed'})
-            }
+        return format_error(405, f"Method {http_method} not allowed", method=http_method)
             
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "An unexpected error occurred", internal_error=e)
 
 
-def list_templates(user_id):
+def list_templates():
     """List all templates (defaults + custom)"""
     try:
         # Get custom templates from DynamoDB
@@ -180,25 +139,16 @@ def list_templates(user_id):
         # Combine with defaults
         all_templates = DEFAULT_TEMPLATES + custom_templates
         
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': json.dumps({
-                'templates': all_templates,
-                'count': len(all_templates)
-            })
-        }
+        return format_response(200, {
+            'templates': all_templates,
+            'count': len(all_templates)
+        })
     except Exception as e:
-        print(f"Error listing templates: {str(e)}")
         # Return defaults if DB fails
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': json.dumps({
-                'templates': DEFAULT_TEMPLATES,
-                'count': len(DEFAULT_TEMPLATES)
-            })
-        }
+        return format_response(200, {
+            'templates': DEFAULT_TEMPLATES,
+            'count': len(DEFAULT_TEMPLATES)
+        })
 
 
 def get_template(template_id):
@@ -206,11 +156,7 @@ def get_template(template_id):
     # Check defaults first
     for template in DEFAULT_TEMPLATES:
         if template['template_id'] == template_id:
-            return {
-                'statusCode': 200,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'template': template})
-            }
+            return format_response(200, {'template': template})
     
     # Check custom templates
     try:
@@ -218,47 +164,28 @@ def get_template(template_id):
         template = response.get('Item')
         
         if not template:
-            return {
-                'statusCode': 404,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Template not found'})
-            }
+            return format_error(404, "Template not found")
         
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'template': template})
-        }
+        return format_response(200, {'template': template})
     except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "Failed to get template", internal_error=e)
 
 
 def create_template(event, user_id):
     """Create a new custom template"""
     try:
-        body = json.loads(event.get('body', '{}'))
+        try:
+            body = json.loads(event.get('body', '{}'))
+        except json.JSONDecodeError:
+            return format_error(400, "Invalid JSON in request body", method='POST')
         
+        is_valid, error_msg = validate_input(body, ['name', 'example_output'])
+        if not is_valid:
+            return format_error(400, error_msg, method='POST')
+
         name = body.get('name', '').strip()
         description = body.get('description', '').strip()
         example_output = body.get('example_output', '').strip()
-        
-        if not name:
-            return {
-                'statusCode': 400,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Template name is required'})
-            }
-        
-        if not example_output:
-            return {
-                'statusCode': 400,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Example output is required'})
-            }
         
         template_id = f"custom_{uuid.uuid4().hex[:8]}"
         timestamp = datetime.utcnow().isoformat()
@@ -276,21 +203,13 @@ def create_template(event, user_id):
         
         table.put_item(Item=item)
         
-        return {
-            'statusCode': 201,
-            'headers': get_cors_headers(),
-            'body': json.dumps({
-                'message': 'Template created successfully',
-                'template': item
-            })
-        }
+        return format_response(201, {
+            'message': 'Template created successfully',
+            'template': item
+        }, method='POST')
         
     except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "Failed to create template", internal_error=e, method='POST')
 
 
 def update_template(event, template_id, user_id):
@@ -298,25 +217,20 @@ def update_template(event, template_id, user_id):
     # Cannot update default templates
     for template in DEFAULT_TEMPLATES:
         if template['template_id'] == template_id:
-            return {
-                'statusCode': 400,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Cannot modify default templates'})
-            }
+            return format_error(400, "Cannot modify default templates", method='PUT')
     
     try:
-        body = json.loads(event.get('body', '{}'))
+        try:
+            body = json.loads(event.get('body', '{}'))
+        except json.JSONDecodeError:
+            return format_error(400, "Invalid JSON in request body", method='PUT')
         
         name = body.get('name', '').strip()
         description = body.get('description', '').strip()
         example_output = body.get('example_output', '').strip()
         
         if not name:
-            return {
-                'statusCode': 400,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Template name is required'})
-            }
+            return format_error(400, "Template name is required", method='PUT')
         
         timestamp = datetime.utcnow().isoformat()
         
@@ -334,21 +248,13 @@ def update_template(event, template_id, user_id):
             ReturnValues='ALL_NEW'
         )
         
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': json.dumps({
-                'message': 'Template updated successfully',
-                'template': response.get('Attributes', {})
-            })
-        }
+        return format_response(200, {
+            'message': 'Template updated successfully',
+            'template': response.get('Attributes', {})
+        }, method='PUT')
         
     except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "Failed to update template", internal_error=e, method='PUT')
 
 
 def delete_template(template_id):
@@ -356,24 +262,12 @@ def delete_template(template_id):
     # Cannot delete default templates
     for template in DEFAULT_TEMPLATES:
         if template['template_id'] == template_id:
-            return {
-                'statusCode': 400,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Cannot delete default templates'})
-            }
+            return format_error(400, "Cannot delete default templates", method='DELETE')
     
     try:
         table.delete_item(Key={'template_id': template_id})
         
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'message': 'Template deleted successfully'})
-        }
+        return format_response(200, {'message': 'Template deleted successfully'}, method='DELETE')
         
     except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "Failed to delete template", internal_error=e, method='DELETE')

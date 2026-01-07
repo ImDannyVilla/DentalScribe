@@ -458,9 +458,16 @@ body {
 /* --- MAIN CONTENT --- */
 .main-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
   height: 100vh;
   overflow: hidden;
   background: var(--bg-page);
+  box-sizing: border-box;
+  margin-left: 0;
+  padding-left: 0;
 }
 
 /* =========================================
@@ -489,7 +496,7 @@ body {
 }
 
 #view-scribe {
-  align-items: center;
+  align-items: stretch;
 }
 
 #view-scribe .view-header {
@@ -702,12 +709,17 @@ body {
 /* --- RESULTS GRID --- */
 .results-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
+  grid-template-rows: 0.65fr 0.35fr;
   gap: 1.5rem;
   margin-top: 1.5rem;
   flex: 1;
   min-height: 400px;
 }
+
+/* Ensure panels fill allocated grid rows and scroll internally */
+.results-grid .panel { height: 100%; overflow: hidden; }
+.results-grid .scroll-box { height: 100%; }
 
 .panel {
   background: white;
@@ -741,6 +753,7 @@ body {
   flex: 1;
   padding: 1.5rem;
   overflow-y: auto;
+  overflow-x: hidden;
   font-size: 0.95rem;
   line-height: 1.6;
   border: none;
@@ -748,6 +761,11 @@ body {
   font-family: inherit;
   color: var(--text-main);
   background: white;
+  width: 100%;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .btn-small {
@@ -1204,7 +1222,7 @@ input:disabled + .toggle-slider {
   inset: 56px 0 64px 0; /* top toolbar 56, bottom nav 64 */
   background: var(--bg-page);
   display: grid;
-  grid-template-rows: 1fr 1fr;
+  grid-template-rows: 0.65fr 0.35fr;
   grid-template-columns: 1fr;
   gap: 8px;
   padding: 8px;
@@ -1244,6 +1262,7 @@ input:disabled + .toggle-slider {
     display: flex;
     z-index: 600;
     border-top: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0; /* ensure nav bar has no rounded corners */
   }
   .bottom-nav .nav-item {
     flex: 1;
@@ -1256,6 +1275,7 @@ input:disabled + .toggle-slider {
     font-size: 12px;
     gap: 4px;
     padding-top: 4px;
+    border-radius: 0; /* remove rounded corners on bottom widget items */
   }
   .bottom-nav .nav-item i { font-size: 18px; }
   .bottom-nav .nav-item.active { color: #fff; }
@@ -1371,7 +1391,12 @@ input:disabled + .toggle-slider {
   line-height: 1.6;
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: hidden;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* =========================================
@@ -1662,4 +1687,359 @@ input:disabled + .toggle-slider {
 @keyframes dotBounce {
   0%, 80%, 100% { transform: translateY(0); opacity: 0.6; }
   40% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* =========================================
+   SCRIBE WORKSPACE PANEL (Desktop & Mobile)
+   ========================================= */
+
+/* Base Container - Desktop First */
+
+/* Header Alignment */
+
+
+/* Patient Name Badge */
+
+/* Content Containers */
+.note-container,
+.transcript-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 1.5rem;
+}
+
+/* HIERARCHY: Note gets 60%, Transcript gets 40% (Visual weight) */
+.note-container {
+  flex: 1; /* Takes available space */
+  min-height: 400px;
+}
+
+.transcript-container {
+  height: 250px; /* Fixed height for secondary info */
+  flex-shrink: 0;
+}
+
+.workspace-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Textarea Styling - Fix Clipping */
+#soap-note,
+#transcript {
+  width: 100%;
+  height: 100%;
+  padding: 1rem;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: white;
+  font-family: 'Inter', system-ui, sans-serif; /* Clean font, not code font */
+  font-size: 0.95rem;
+  line-height: 1.6;
+  resize: none;
+  box-sizing: border-box;
+  /* CRITICAL TEXT WRAPPING FIXES */
+  white-space: pre-wrap;       /* Respect newlines but wrap text */
+  word-wrap: break-word;       /* Break long words */
+  overflow-wrap: break-word;   /* Standard break */
+  overflow-y: auto;            /* Scroll vertical only */
+  overflow-x: hidden;          /* No horizontal scroll */
+  box-shadow: var(--shadow-card);
+}
+
+
+#soap-note {
+  border-color: #cbd5e1; /* Slightly darker border for focus */
+}
+
+#soap-note:focus {
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  outline: none;
+}
+
+/* =========================================
+   MOBILE OVERLAY (Max-Width: 768px)
+   ========================================= */
+@media (max-width: 768px) {
+  .note-container {
+    min-height: 0; /* Let flex handle height */
+    flex: 2; /* Note is 2x larger than transcript */
+  }
+
+  .transcript-container {
+    height: auto;
+    flex: 1;
+  }
+}
+/* Make content scroll and wrap correctly */
+.note-container .scroll-box,
+.transcript-container .scroll-box,
+.note-container textarea,
+.transcript-container textarea {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+
+/* =========================================
+   9.6 WORKSPACE RESPONSIVE BEHAVIOR (Desktop vs Mobile)
+   ========================================= */
+/* Default desktop-friendly behavior */
+
+/* Centered Results Card */
+/* UPDATED CSS - RESULTS VIEW */
+
+/* Main Container: Fixes overlap and vertical alignment */
+.results-center {
+  display: flex;
+  /* Changed from center to flex-start so it doesn't float up under the header */
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  /* Ensure it takes full height but respects header offset if needed */
+  height: 100%; 
+  /* Reduce outer padding to make box "bigger" */
+  padding: 1rem;
+  /* Add top padding to clear the navigation header */
+  padding-top: 4rem; 
+  /* Force this layer on top of any lingering background layers */
+  position: relative; 
+  z-index: 20; 
+}
+
+/* The Card: Wider and taller */
+.results-card {
+  background: #ffffff;
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  width: 100%;
+  /* Centered readable width on desktop */
+  max-width: 1200px;
+  margin: 0 auto;
+  /* Let it grow taller if needed, but keep viewport constraint */
+  max-height: 90vh; 
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-light);
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-subheader {
+  padding: 0.75rem 1.25rem 0;
+  color: var(--text-muted);
+}
+
+.panel-subheader h5 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transcript-toggle {
+  padding: 0.5rem 1.25rem;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--primary-blue);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+.link-button:hover { text-decoration: underline; }
+
+.transcript-section {
+  padding: 0 1.25rem 1.25rem;
+}
+
+/* Constrain textarea heights within card */
+.results-card .note-editor.scroll-box {
+  /* Allow the note to expand to fill the rest of the card */
+  flex: 1; 
+  min-height: 400px; /* Increased min-height for better visibility */
+  overflow-y: auto;
+}
+
+.results-card #transcript.scroll-box {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+/* Ensure takeover does NOT overlay sidebar on desktop */
+@media (min-width: 768px) {
+  /* Hide fixed toolbar on desktop to avoid header overlap */
+  #results-toolbar { display: none !important; }
+
+  .results-grid.takeover,
+  .results-center.takeover {
+    position: static;
+    inset: auto;
+    background: transparent;
+    gap: 1.5rem;
+    padding: 0;
+    z-index: auto;
+  }
+  .results-center { padding: 1rem; }
+  /* Reduce view padding for Scribe on desktop to maximize width */
+}
+
+@media (min-width: 1280px) {
+  .results-center { padding: 0.75rem; }
+}
+
+/* Keep focused full-screen overlay on mobile */
+@media (max-width: 767px) {
+  .results-center.takeover {
+    position: fixed;
+    inset: 56px 0 64px 0; /* match toolbar + bottom nav */
+    background: var(--bg-page);
+    padding: 8px;
+    z-index: 500;
+    align-items: stretch;
+  }
+  /* Remove rounded corners on generated note card and editor on mobile */
+  .results-card { 
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+  }
+  .note-editor { border-radius: 0; }
+
+  /* Ensure results area has extra breathing room above bottom nav when not in takeover */
+  .results-center { padding-bottom: 80px; }
+
+  /* Add extra bottom padding to mobile views to avoid bottom nav overlap */
+  #view-scribe,
+  #view-visits,
+  #view-templates,
+  #view-settings { padding-bottom: 100px; }
+}
+
+/* Results header actions spacing */
+.card-header .header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+
+/* Center legacy note/transcript containers on desktop */
+@media (min-width: 768px) {
+  .note-container,
+  .transcript-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+
+/* =========================================
+   Tabs for Scribe Workspace Results
+   ========================================= */
+.results-card .tab-bar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid var(--border-light);
+  background: #f8fafc;
+}
+
+.results-card .tab-button {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0.75rem 1rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.results-card .tab-button.active {
+  color: var(--primary-blue);
+  border-bottom-color: var(--primary-blue);
+}
+
+.results-card .tab-content {
+  display: flex;
+  flex: 1;
+  padding: 1rem 1.25rem 1.25rem;
+  overflow: hidden;
+}
+
+.results-card .tab-content textarea.scroll-box {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+
+/* Team list empty/error states */
+.team-list .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.team-list .empty-state i {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.5;
+}
+
+.team-list .empty-state p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.team-list .empty-state .empty-subtext {
+  font-size: 0.85rem;
+  font-weight: 400;
+  margin-top: 0.25rem;
+}
+
+.team-list .empty-state.error i {
+  color: var(--danger);
+  opacity: 1;
+}
+
+.team-list .empty-state.error p {
+  color: var(--danger);
 }

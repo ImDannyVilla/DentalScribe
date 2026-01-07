@@ -1,0 +1,1 @@
+This session adds CSS fixes for Results view header overlap and desktop card width.

@@ -3,6 +3,7 @@ import boto3
 import base64
 import os
 import httpx
+from security import format_response, format_error, validate_input
 
 secrets_client = boto3.client('secretsmanager')
 
@@ -16,16 +17,34 @@ def get_deepgram_key():
 
 
 def lambda_handler(event, context):
+    # Handle OPTIONS preflight
+    if event.get('httpMethod') == 'OPTIONS':
+        return format_response(200, {}, method='POST')
+
     try:
-        body = json.loads(event['body'])
+        # 1. Parse and Validate Input
+        try:
+            body = json.loads(event.get('body', '{}'))
+        except json.JSONDecodeError:
+            return format_error(400, "Invalid JSON in request body", method='POST')
 
-        # Audio should be base64 encoded
-        audio_data = base64.b64decode(body['audio'])
+        is_valid, error_msg = validate_input(body, ['audio'])
+        if not is_valid:
+            return format_error(400, error_msg, method='POST')
 
-        # Get Deepgram API key
-        api_key = get_deepgram_key()
+        # 2. Process Audio
+        try:
+            audio_data = base64.b64decode(body['audio'])
+        except Exception:
+            return format_error(400, "Invalid base64 encoding for audio", method='POST')
 
-        # Call Deepgram API directly with httpx
+        # 3. Get Deepgram API key
+        try:
+            api_key = get_deepgram_key()
+        except Exception as e:
+            return format_error(500, "Failed to retrieve API key", internal_error=e, method='POST')
+
+        # 4. Call Deepgram API
         url = 'https://api.deepgram.com/v1/listen'
         headers = {
             'Authorization': f'Token {api_key}',
@@ -49,31 +68,16 @@ def lambda_handler(event, context):
         )
 
         if response.status_code != 200:
-            raise Exception(f'Deepgram API error: {response.status_code} - {response.text}')
+            return format_error(response.status_code, f"Transcription service error: {response.status_code}", internal_error=response.text, method='POST')
 
         result = response.json()
         transcript = result['results']['channels'][0]['alternatives'][0]['transcript']
         confidence = result['results']['channels'][0]['alternatives'][0]['confidence']
 
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({
-                'transcript': transcript,
-                'confidence': confidence
-            })
-        }
+        return format_response(200, {
+            'transcript': transcript,
+            'confidence': confidence
+        }, method='POST')
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': str(e)})
-        }
+        return format_error(500, "An unexpected error occurred", internal_error=e, method='POST')

@@ -23,6 +23,11 @@ Parameters:
     Type: String
     Description: The ID of the existing Cognito App Client
 
+  AllowedOrigins:
+    Type: String
+    Default: 'https://scribe32.com,https://www.scribe32.com'
+    Description: Comma-separated list of allowed CORS origins
+
 Globals:
   Function:
     Runtime: python3.12
@@ -37,6 +42,8 @@ Globals:
         TEMPLATES_TABLE: !Ref TemplatesTable
         DEEPGRAM_SECRET_ARN: !Ref DeepgramSecret
         USER_POOL_ID: !Ref ExistingUserPoolId
+        ALLOWED_ORIGINS: !Ref AllowedOrigins
+        STAGE: !Ref Environment
     Tracing: Active
 
 Resources:
@@ -186,6 +193,11 @@ Resources:
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
+      MethodSettings:
+        - ThrottlingBurstLimit: 100
+          ThrottlingRateLimit: 50
+          ResourcePath: '/*'
+          HttpMethod: '*'
 
   ApiLogGroup:
     Type: AWS::Logs::LogGroup
@@ -405,6 +417,7 @@ Resources:
               Action:
                 - cognito-idp:AdminCreateUser
                 - cognito-idp:AdminGetUser
+                - cognito-idp:AdminAddUserToGroup
               Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
             - Effect: Allow
               Action:
