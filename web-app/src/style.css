@@ -495,22 +495,44 @@ body {
   order: 3;
 }
 
+/* =========================================
+   CENTER NEW VISIT SETUP CARD
+   ========================================= */
 #view-scribe {
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
 }
 
 #view-scribe .view-header {
   width: 100%;
   max-width: 700px;
+  text-align: left;
 }
 
 #view-scribe .setup-card {
   width: 100%;
+  max-width: 700px;
 }
 
-#view-scribe .results-grid {
+/* Keep results panel properly sized */
+#view-scribe .results-center {
   width: 100%;
   max-width: 1200px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 767px) {
+  #view-scribe {
+    padding: 1rem;
+    align-items: stretch;
+  }
+  
+  #view-scribe .view-header,
+  #view-scribe .setup-card {
+    max-width: none;
+  }
 }
 
 /* =========================================

@@ -35,6 +35,7 @@ let currentUser = null;
 let idToken = null;
 let userRole = 'user';
 let userEmail = '';
+let userName = '';
 let mediaRecorder = null;
 let audioChunks = [];
 let selectedPatient = null;
@@ -214,6 +215,7 @@ function login(email, password) {
       const isAdmin = groupsList.some(g => String(g).trim().toLowerCase() === 'admin');
       userRole = isAdmin ? 'admin' : 'user';
       userEmail = payload.email || email;
+      userName = payload.name || '';
 
       console.log("User role:", userRole);
       console.log("User email:", userEmail);
@@ -261,6 +263,7 @@ function logout() {
   idToken = null;
   userRole = 'user';
   userEmail = '';
+  userName = '';
   selectedPatient = null;
   templatesCache = [];
   visitsCache = [];
@@ -285,11 +288,13 @@ function updateUserDisplay() {
   const sidebarRole = document.getElementById('sidebar-user-role');
   const settingsEmail = document.getElementById('settings-email');
   const settingsRole = document.getElementById('settings-role');
+  const settingsName = document.getElementById('settings-name');
 
   if(sidebarEmail) sidebarEmail.textContent = userEmail;
   if(sidebarRole) sidebarRole.textContent = userRole === 'admin' ? 'Administrator' : 'User';
   if(settingsEmail) settingsEmail.value = userEmail;
   if(settingsRole) settingsRole.value = userRole === 'admin' ? 'Administrator' : 'User';
+  if(settingsName) settingsName.value = userName;
 }
 
 // ============================================
@@ -410,6 +415,65 @@ function changePassword(currentPassword, newPassword, confirmPassword) {
       document.getElementById('current-password').value = '';
       document.getElementById('settings-new-password').value = '';
       document.getElementById('settings-confirm-password').value = '';
+    }
+  });
+}
+
+// ============================================
+// Save Profile Function
+// ============================================
+function saveProfile() {
+  const nameInput = document.getElementById('settings-name');
+  const newName = nameInput?.value.trim();
+
+  if (!newName) {
+    showError('profile-save-error', 'Please enter a name');
+    return;
+  }
+
+  if (newName.length > 100) {
+    showError('profile-save-error', 'Name must be less than 100 characters');
+    return;
+  }
+
+  if (!currentUser) {
+    showError('profile-save-error', 'Not logged in');
+    return;
+  }
+
+  // Show loading state
+  const saveBtn = document.getElementById('save-profile-btn');
+  const originalText = saveBtn?.innerHTML;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+  }
+
+  // Update Cognito user attributes
+  const attributes = [
+    { Name: 'name', Value: newName }
+  ];
+
+  currentUser.updateAttributes(attributes, (err, result) => {
+    // Restore button
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = originalText || '<i class="fa-solid fa-save"></i> Save Profile';
+    }
+
+    if (err) {
+      console.error('Profile update error:', err);
+      showError('profile-save-error', err.message || 'Failed to update profile');
+    } else {
+      console.log('Profile updated successfully');
+      userName = newName;
+      showSuccess('profile-save-success', 'Profile updated successfully!');
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        const successEl = document.getElementById('profile-save-success');
+        if (successEl) successEl.textContent = '';
+      }, 3000);
     }
   });
 }
@@ -1534,6 +1598,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (newPasswordInput) newPasswordInput.value = '';
   if (confirmPasswordInput) confirmPasswordInput.value = '';
 
+  const settingsNameInput = document.getElementById('settings-name');
+  if (settingsNameInput) settingsNameInput.value = '';
+
   // ============================================
   // Login Handlers
   // ============================================
@@ -1877,6 +1944,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('settings-confirm-password')?.value
       );
     });
+  }
+
+  // ============================================
+  // Settings - Save Profile
+  // ============================================
+  const saveProfileBtn = document.getElementById('save-profile-btn');
+  if (saveProfileBtn) {
+    saveProfileBtn.addEventListener('click', saveProfile);
   }
 
   // Close modals on outside click

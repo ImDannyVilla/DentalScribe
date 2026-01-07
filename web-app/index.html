@@ -423,6 +423,10 @@ PLAN:
                 <h3><i class="fa-solid fa-user"></i> Profile</h3>
                 <div class="settings-form">
                   <div class="input-group">
+                    <label>Name</label>
+                    <input type="text" id="settings-name" class="input-modern" placeholder="Your name" autocomplete="off">
+                  </div>
+                  <div class="input-group">
                     <label>Email</label>
                     <input type="email" id="settings-email" class="input-modern" disabled>
                   </div>
@@ -430,6 +434,11 @@ PLAN:
                     <label>Role</label>
                     <input type="text" id="settings-role" class="input-modern" disabled>
                   </div>
+                  <button id="save-profile-btn" class="btn-primary">
+                    <i class="fa-solid fa-save"></i> Save Profile
+                  </button>
+                  <p id="profile-save-error" class="error-text"></p>
+                  <p id="profile-save-success" class="success-text"></p>
                 </div>
               </div>
 
